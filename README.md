@@ -1,8 +1,5 @@
 # Akaylee Fuzzer 🚀
 
-**Author:** KleaSCM  
-**Email:** KleaSCM@gmail.com  
-**Description:** A high-performance, production-level fuzzer written in Go designed for maximum speed and power.
 
 ## Overview
 
