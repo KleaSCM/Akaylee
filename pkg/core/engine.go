@@ -31,13 +31,17 @@ type Engine struct {
 	logger *logrus.Logger
 
 	// Core components
-	executor interfaces.Executor
-	analyzer interfaces.Analyzer
+	executor Executor
+	analyzer Analyzer
 	mutators []interfaces.Mutator
 
 	// Corpus management
 	corpus *Corpus
 	queue  *PriorityQueue
+
+	// Type conversion helpers
+	interfaceToCore func(*interfaces.TestCase) *TestCase
+	coreToInterface func(*TestCase) *interfaces.TestCase
 
 	// Worker management
 	workers    []*Worker
@@ -111,17 +115,46 @@ func (e *Engine) Initialize(config *interfaces.FuzzerConfig) error {
 
 // SetExecutor sets the executor for the engine
 func (e *Engine) SetExecutor(executor interfaces.Executor) {
-	e.executor = executor
+	e.executor = NewAdapterExecutor(executor)
 }
 
 // SetAnalyzer sets the analyzer for the engine
 func (e *Engine) SetAnalyzer(analyzer interfaces.Analyzer) {
-	e.analyzer = analyzer
+	e.analyzer = NewAdapterAnalyzer(analyzer)
 }
 
 // SetMutators sets the mutators for the engine
 func (e *Engine) SetMutators(mutators []interfaces.Mutator) {
-	e.mutators = mutators
+	// Store interface mutators directly
+	e.mutators = make([]interfaces.Mutator, len(mutators))
+	copy(e.mutators, mutators)
+
+	// Set up conversion helpers
+	e.interfaceToCore = func(itc *interfaces.TestCase) *TestCase {
+		return &TestCase{
+			ID:         itc.ID,
+			Data:       itc.Data,
+			ParentID:   itc.ParentID,
+			Generation: itc.Generation,
+			CreatedAt:  itc.CreatedAt,
+			Executions: itc.Executions,
+			Priority:   itc.Priority,
+			Metadata:   itc.Metadata,
+		}
+	}
+
+	e.coreToInterface = func(ctc *TestCase) *interfaces.TestCase {
+		return &interfaces.TestCase{
+			ID:         ctc.ID,
+			Data:       ctc.Data,
+			ParentID:   ctc.ParentID,
+			Generation: ctc.Generation,
+			CreatedAt:  ctc.CreatedAt,
+			Executions: ctc.Executions,
+			Priority:   ctc.Priority,
+			Metadata:   ctc.Metadata,
+		}
+	}
 }
 
 // setupLogging configures the logging system based on configuration
@@ -347,7 +380,10 @@ func (e *Engine) generateTestCases() {
 
 		// Generate multiple mutations
 		for i := 0; i < e.config.MaxMutations; i++ {
-			mutated, err := mutator.Mutate(source)
+			// Convert source to interface type
+			interfaceSource := e.coreToInterface(source)
+
+			mutated, err := mutator.Mutate(interfaceSource)
 			if err != nil {
 				e.logger.Debugf("Mutation failed: %v", err)
 				continue
@@ -357,11 +393,14 @@ func (e *Engine) generateTestCases() {
 			mutated.ParentID = source.ID
 			mutated.Generation = source.Generation + 1
 			mutated.CreatedAt = time.Now()
-			mutated.Priority = e.calculatePriority(mutated)
+
+			// Convert back to core type for priority calculation
+			coreMutated := e.interfaceToCore(mutated)
+			coreMutated.Priority = e.calculatePriority(coreMutated)
 
 			// Add to corpus and queue
-			if err := e.corpus.Add(mutated); err == nil {
-				e.queue.Put(mutated)
+			if err := e.corpus.Add(coreMutated); err == nil {
+				e.queue.Put(coreMutated)
 			}
 		}
 	}
@@ -532,6 +571,7 @@ func (e *Engine) calculateExecutionRate() {
 		executions := e.stats.Executions
 		rate := float64(executions) / duration
 		e.stats.ExecutionsPerSecond = rate
+		e.executionRate = rate // Store in engine field for performance tracking
 	}
 
 	e.lastStatsUpdate = now

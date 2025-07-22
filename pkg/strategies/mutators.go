@@ -15,7 +15,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 )
 
 // BitFlipMutator implements bit-level mutation strategy
@@ -32,7 +32,7 @@ func NewBitFlipMutator(mutationRate float64) *BitFlipMutator {
 }
 
 // Mutate creates a new test case by flipping bits in the original
-func (m *BitFlipMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error) {
+func (m *BitFlipMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
 	// Create copy of original data
 	mutatedData := make([]byte, len(testCase.Data))
 	copy(mutatedData, testCase.Data)
@@ -47,7 +47,7 @@ func (m *BitFlipMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error)
 	}
 
 	// Create new test case
-	mutated := &core.TestCase{
+	mutated := &interfaces.TestCase{
 		ID:         generateTestCaseID(),
 		Data:       mutatedData,
 		ParentID:   testCase.ID,
@@ -87,7 +87,7 @@ func NewByteSubstitutionMutator(mutationRate float64) *ByteSubstitutionMutator {
 }
 
 // Mutate creates a new test case by substituting bytes in the original
-func (m *ByteSubstitutionMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error) {
+func (m *ByteSubstitutionMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
 	// Create copy of original data
 	mutatedData := make([]byte, len(testCase.Data))
 	copy(mutatedData, testCase.Data)
@@ -100,7 +100,7 @@ func (m *ByteSubstitutionMutator) Mutate(testCase *core.TestCase) (*core.TestCas
 	}
 
 	// Create new test case
-	mutated := &core.TestCase{
+	mutated := &interfaces.TestCase{
 		ID:         generateTestCaseID(),
 		Data:       mutatedData,
 		ParentID:   testCase.ID,
@@ -140,7 +140,7 @@ func NewArithmeticMutator(mutationRate float64) *ArithmeticMutator {
 }
 
 // Mutate creates a new test case by performing arithmetic operations
-func (m *ArithmeticMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error) {
+func (m *ArithmeticMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
 	// Create copy of original data
 	mutatedData := make([]byte, len(testCase.Data))
 	copy(mutatedData, testCase.Data)
@@ -175,7 +175,7 @@ func (m *ArithmeticMutator) Mutate(testCase *core.TestCase) (*core.TestCase, err
 	}
 
 	// Create new test case
-	mutated := &core.TestCase{
+	mutated := &interfaces.TestCase{
 		ID:         generateTestCaseID(),
 		Data:       mutatedData,
 		ParentID:   testCase.ID,
@@ -215,7 +215,7 @@ func NewStructureAwareMutator(mutationRate float64) *StructureAwareMutator {
 }
 
 // Mutate creates a new test case with structure-aware mutations
-func (m *StructureAwareMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error) {
+func (m *StructureAwareMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
 	// Create copy of original data
 	mutatedData := make([]byte, len(testCase.Data))
 	copy(mutatedData, testCase.Data)
@@ -224,7 +224,7 @@ func (m *StructureAwareMutator) Mutate(testCase *core.TestCase) (*core.TestCase,
 	mutatedData = m.applyStructureMutations(mutatedData)
 
 	// Create new test case
-	mutated := &core.TestCase{
+	mutated := &interfaces.TestCase{
 		ID:         generateTestCaseID(),
 		Data:       mutatedData,
 		ParentID:   testCase.ID,
@@ -287,7 +287,7 @@ func NewCrossOverMutator(mutationRate float64) *CrossOverMutator {
 }
 
 // Mutate creates a new test case by combining parts of multiple test cases
-func (m *CrossOverMutator) Mutate(testCase *core.TestCase) (*core.TestCase, error) {
+func (m *CrossOverMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
 	// For crossover, we need multiple test cases
 	// This is a simplified implementation that creates variations
 	mutatedData := make([]byte, len(testCase.Data))
@@ -319,7 +319,7 @@ func (m *CrossOverMutator) Mutate(testCase *core.TestCase) (*core.TestCase, erro
 	}
 
 	// Create new test case
-	mutated := &core.TestCase{
+	mutated := &interfaces.TestCase{
 		ID:         generateTestCaseID(),
 		Data:       mutatedData,
 		ParentID:   testCase.ID,
