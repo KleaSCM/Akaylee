@@ -127,19 +127,23 @@ type FuzzerConfig struct {
 }
 
 // Executor interface for executing test cases
+// Now supports Reset() for hot reload/config reload
 type Executor interface {
 	Initialize(config *FuzzerConfig) error
 	Execute(testCase *TestCase) (*ExecutionResult, error)
 	Cleanup() error
+	Reset() error // New: Reset executor state
 }
 
 // Analyzer interface for analyzing execution results
+// Now supports Reset() for hot reload/config reload
 type Analyzer interface {
 	Analyze(result *ExecutionResult) error
 	IsInteresting(testCase *TestCase) bool
 	GetCoverage(result *ExecutionResult) (*Coverage, error)
 	DetectCrash(result *ExecutionResult) (*CrashInfo, error)
 	DetectHang(result *ExecutionResult) (*HangInfo, error)
+	Reset() error // New: Reset analyzer state
 }
 
 // Mutator interface for mutating test cases

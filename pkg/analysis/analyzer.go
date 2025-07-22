@@ -319,3 +319,6 @@ func (a *CoverageAnalyzer) extractStackTrace(result *interfaces.ExecutionResult)
 		"runtime.goexit()",
 	}
 }
+
+// Reset resets the analyzer state (no-op for CoverageAnalyzer)
+func (a *CoverageAnalyzer) Reset() error { return nil }

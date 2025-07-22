@@ -73,6 +73,9 @@ func (m *BitFlipMutator) Description() string {
 	return "Flips individual bits in test case data for fine-grained mutations"
 }
 
+// Add Init() to all mutators for stateful setup
+func (m *BitFlipMutator) Init() error { return nil }
+
 // ByteSubstitutionMutator implements byte-level substitution strategy
 // Replaces bytes with random values or predefined patterns
 type ByteSubstitutionMutator struct {
@@ -125,6 +128,9 @@ func (m *ByteSubstitutionMutator) Name() string {
 func (m *ByteSubstitutionMutator) Description() string {
 	return "Substitutes bytes with random values for coarse-grained mutations"
 }
+
+// Add Init() to all mutators for stateful setup
+func (m *ByteSubstitutionMutator) Init() error { return nil }
 
 // ArithmeticMutator implements arithmetic mutation strategy
 // Performs arithmetic operations on numeric values in the test case
@@ -201,6 +207,9 @@ func (m *ArithmeticMutator) Description() string {
 	return "Performs arithmetic operations on numeric values in test cases"
 }
 
+// Add Init() to all mutators for stateful setup
+func (m *ArithmeticMutator) Init() error { return nil }
+
 // StructureAwareMutator implements structure-aware mutation strategy
 // Maintains data structure integrity while performing mutations
 type StructureAwareMutator struct {
@@ -273,6 +282,9 @@ func (m *StructureAwareMutator) Description() string {
 	return "Performs mutations while preserving data structure integrity"
 }
 
+// Add Init() to all mutators for stateful setup
+func (m *StructureAwareMutator) Init() error { return nil }
+
 // CrossOverMutator implements crossover mutation strategy
 // Combines parts of multiple test cases to create new ones
 type CrossOverMutator struct {
@@ -344,6 +356,9 @@ func (m *CrossOverMutator) Name() string {
 func (m *CrossOverMutator) Description() string {
 	return "Combines parts of multiple test cases to create new ones"
 }
+
+// Add Init() to all mutators for stateful setup
+func (m *CrossOverMutator) Init() error { return nil }
 
 // generateTestCaseID generates a unique test case ID
 func generateTestCaseID() string {

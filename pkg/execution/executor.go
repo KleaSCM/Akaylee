@@ -143,3 +143,6 @@ func (e *ProcessExecutor) setResourceLimits(cmd *exec.Cmd) {
 func (e *ProcessExecutor) Cleanup() error {
 	return nil
 }
+
+// Reset resets the executor state (no-op for ProcessExecutor)
+func (e *ProcessExecutor) Reset() error { return nil }

@@ -10,13 +10,14 @@ package core_test
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
-	"github.com/kleascm/akaylee-fuzzer/pkg/utils"
+	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,10 +71,9 @@ func TestEngineInitialization(t *testing.T) {
 		engine := core.NewEngine()
 		assert.NotNil(t, engine)
 
-		// Set up mocks
-		executor := &MockExecutor{}
-		analyzer := &MockAnalyzer{}
-		mutators := []interfaces.Mutator{&MockMutator{}}
+		executor := execution.NewProcessExecutor()
+		analyzer := analysis.NewCoverageAnalyzer()
+		mutators := []interfaces.Mutator{strategies.NewBitFlipMutator(0.1)}
 
 		engine.SetExecutor(executor)
 		engine.SetAnalyzer(analyzer)
@@ -234,8 +234,8 @@ func TestPriorityQueueUpdate(t *testing.T) {
 // TestWorkerCreation tests worker creation and basic functionality
 func TestWorkerCreation(t *testing.T) {
 	runTest(t, "TestWorkerCreation", func(t *testing.T) {
-		executor := &CoreMockExecutor{}
-		analyzer := &CoreMockAnalyzer{}
+		executor := core.NewAdapterExecutor(execution.NewProcessExecutor())
+		analyzer := core.NewAdapterAnalyzer(analysis.NewCoverageAnalyzer())
 
 		worker := core.NewWorker(1, executor, analyzer, nil)
 		assert.NotNil(t, worker)
@@ -248,8 +248,8 @@ func TestWorkerCreation(t *testing.T) {
 func TestWorkerExecution(t *testing.T) {
 	t.Skip("Skipping due to known hang issue")
 	runTest(t, "TestWorkerExecution", func(t *testing.T) {
-		executor := &CoreMockExecutor{}
-		analyzer := &CoreMockAnalyzer{}
+		executor := core.NewAdapterExecutor(execution.NewProcessExecutor())
+		analyzer := core.NewAdapterAnalyzer(analysis.NewCoverageAnalyzer())
 
 		worker := core.NewWorker(1, executor, analyzer, nil)
 
@@ -452,98 +452,6 @@ func TestFuzzerConfigCreation(t *testing.T) {
 	assert.False(t, config.JSONLogs)
 }
 
-// Mock implementations for testing
-
-type MockExecutor struct{}
-
-func (m *MockExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.ExecutionResult, error) {
-	return &interfaces.ExecutionResult{
-		TestCaseID: testCase.ID,
-		Status:     interfaces.StatusSuccess,
-		ExitCode:   0,
-		Duration:   10 * time.Millisecond,
-	}, nil
-}
-
-func (m *MockExecutor) Initialize(config *interfaces.FuzzerConfig) error {
-	return nil
-}
-
-func (m *MockExecutor) Cleanup() error {
-	return nil
-}
-
-type MockAnalyzer struct{}
-
-func (m *MockAnalyzer) Analyze(result *interfaces.ExecutionResult) error {
-	return nil
-}
-
-func (m *MockAnalyzer) IsInteresting(testCase *interfaces.TestCase) bool {
-	return true
-}
-
-func (m *MockAnalyzer) GetCoverage(result *interfaces.ExecutionResult) (*interfaces.Coverage, error) {
-	return &interfaces.Coverage{
-		EdgeCount:     10,
-		BlockCount:    5,
-		FunctionCount: 2,
-		Timestamp:     time.Now(),
-		Hash:          12345,
-	}, nil
-}
-
-func (m *MockAnalyzer) DetectCrash(result *interfaces.ExecutionResult) (*interfaces.CrashInfo, error) {
-	return nil, nil
-}
-
-func (m *MockAnalyzer) DetectHang(result *interfaces.ExecutionResult) (*interfaces.HangInfo, error) {
-	return nil, nil
-}
-
-// Add a simple MockMutator for the test
-type MockMutator struct{}
-
-func (m *MockMutator) Mutate(tc *interfaces.TestCase) (*interfaces.TestCase, error) {
-	return tc, nil
-}
-func (m *MockMutator) Name() string        { return "MockMutator" }
-func (m *MockMutator) Description() string { return "Mock mutator for testing" }
-
-// Add core package mocks for worker tests
-type CoreMockExecutor struct{}
-
-func (m *CoreMockExecutor) Execute(testCase *core.TestCase) (*core.ExecutionResult, error) {
-	return &core.ExecutionResult{
-		TestCaseID: testCase.ID,
-		Status:     core.StatusSuccess,
-		ExitCode:   0,
-		Duration:   10 * time.Millisecond,
-	}, nil
-}
-func (m *CoreMockExecutor) Initialize(config *core.FuzzerConfig) error { return nil }
-func (m *CoreMockExecutor) Cleanup() error                             { return nil }
-
-type CoreMockAnalyzer struct{}
-
-func (m *CoreMockAnalyzer) Analyze(result *core.ExecutionResult) error { return nil }
-func (m *CoreMockAnalyzer) IsInteresting(testCase *core.TestCase) bool { return true }
-func (m *CoreMockAnalyzer) GetCoverage(result *core.ExecutionResult) (*core.Coverage, error) {
-	return &core.Coverage{
-		EdgeCount:     10,
-		BlockCount:    5,
-		FunctionCount: 2,
-		Timestamp:     time.Now(),
-		Hash:          12345,
-	}, nil
-}
-func (m *CoreMockAnalyzer) DetectCrash(result *core.ExecutionResult) (*core.CrashInfo, error) {
-	return nil, nil
-}
-func (m *CoreMockAnalyzer) DetectHang(result *core.ExecutionResult) (*core.HangInfo, error) {
-	return nil, nil
-}
-
 // Test suite summary struct
 // (add at the end of the file)
 type CoreTestSummary struct {
@@ -553,44 +461,4 @@ type CoreTestSummary struct {
 	Passed     int             `json:"passed"`
 	Failed     int             `json:"failed"`
 	Details    map[string]bool `json:"details"`
-}
-
-// TestMain for core tests to collect and write metrics
-func TestMain(m *testing.M) {
-	suiteStart = time.Now()
-	code := m.Run()
-	suiteEnd = time.Now()
-
-	total := len(testResults)
-	passed := 0
-	failed := 0
-	for _, r := range testResults {
-		if r.Passed {
-			passed++
-		} else {
-			failed++
-		}
-	}
-
-	summary := map[string]interface{}{
-		"timestamp":        suiteStart.Format("2006-01-02 15:04:05"),
-		"version":          "1.0.0",
-		"total_tests":      total,
-		"passed":           passed,
-		"failed":           failed,
-		"start_time":       suiteStart.Format(time.RFC3339),
-		"end_time":         suiteEnd.Format(time.RFC3339),
-		"duration_seconds": suiteEnd.Sub(suiteStart).Seconds(),
-		"tests":            testResults,
-	}
-
-	fmt.Println("[DEBUG] About to write metrics result...")
-	path, err := utils.WriteMetricsResult("core", "1.0.0", summary)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write metrics: %v\n", err)
-	} else {
-		fmt.Printf("[DEBUG] Metrics written to: %s\n", path)
-	}
-
-	os.Exit(code)
 }
