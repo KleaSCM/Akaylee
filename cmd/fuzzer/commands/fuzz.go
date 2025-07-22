@@ -12,8 +12,14 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -295,7 +301,346 @@ func performDryRun(config *interfaces.FuzzerConfig) error {
 
 // validateSystemResources checks if system has sufficient resources
 func validateSystemResources() error {
-	// This is a simplified validation
-	// In production, you'd check CPU, memory, disk space, etc.
+	var errors []string
+	var warnings []string
+
+	// Check CPU cores and capabilities
+	if err := validateCPU(); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check system memory
+	if err := validateMemory(); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check disk space and I/O
+	if err := validateDisk(); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check process capabilities
+	if err := validateProcessCapabilities(); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check file system permissions
+	if err := validateFileSystem(); err != nil {
+		errors = append(errors, err.Error())
+	}
+
+	// Check network connectivity (optional)
+	if warning := validateNetwork(); warning != "" {
+		warnings = append(warnings, warning)
+	}
+
+	// Display warnings
+	for _, warning := range warnings {
+		fmt.Printf("⚠️  Warning: %s\n", warning)
+	}
+
+	// Return combined errors if any
+	if len(errors) > 0 {
+		return fmt.Errorf("system resource validation failed:\n  %s", strings.Join(errors, "\n  "))
+	}
+
 	return nil
+}
+
+// validateCPU checks CPU cores and capabilities
+func validateCPU() error {
+	cpuCores := runtime.NumCPU()
+
+	if cpuCores < 2 {
+		return fmt.Errorf("insufficient CPU cores: %d (minimum 2 recommended for fuzzing)", cpuCores)
+	}
+
+	// Check CPU architecture
+	arch := runtime.GOARCH
+	if arch != "amd64" && arch != "arm64" {
+		return fmt.Errorf("unsupported CPU architecture: %s (only amd64 and arm64 are fully supported)", arch)
+	}
+
+	// Check if we can use multiple goroutines effectively
+	done := make(chan bool, cpuCores)
+	for i := 0; i < cpuCores; i++ {
+		go func() {
+			// Simulate CPU work
+			for j := 0; j < 1000000; j++ {
+				_ = j * j
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines with timeout
+	timeout := time.After(5 * time.Second)
+	for i := 0; i < cpuCores; i++ {
+		select {
+		case <-done:
+			continue
+		case <-timeout:
+			return fmt.Errorf("CPU concurrency test failed: goroutines not completing in time")
+		}
+	}
+
+	return nil
+}
+
+// validateMemory checks available system memory
+func validateMemory() error {
+	// Try to get memory info from /proc/meminfo on Linux
+	if runtime.GOOS == "linux" {
+		return validateMemoryLinux()
+	}
+
+	// Fallback for other operating systems
+	return validateMemoryGeneric()
+}
+
+// validateMemoryLinux checks memory using /proc/meminfo
+func validateMemoryLinux() error {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return validateMemoryGeneric()
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var totalMem, availableMem uint64
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		switch fields[0] {
+		case "MemTotal:":
+			if val, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
+				totalMem = val * 1024 // Convert KB to bytes
+			}
+		case "MemAvailable:":
+			if val, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
+				availableMem = val * 1024 // Convert KB to bytes
+			}
+		}
+	}
+
+	// Check minimum requirements
+	minTotal := uint64(4 * 1024 * 1024 * 1024)     // 4GB total
+	minAvailable := uint64(2 * 1024 * 1024 * 1024) // 2GB available
+
+	if totalMem < minTotal {
+		return fmt.Errorf("insufficient total memory: %d MB (minimum 4GB recommended)", totalMem/(1024*1024))
+	}
+
+	if availableMem < minAvailable {
+		return fmt.Errorf("insufficient available memory: %d MB (minimum 2GB available)", availableMem/(1024*1024))
+	}
+
+	return nil
+}
+
+// validateMemoryGeneric checks memory using allocation tests
+func validateMemoryGeneric() error {
+	// Test allocation of reasonable amounts of memory
+	testSizes := []uint64{
+		100 * 1024 * 1024,  // 100MB
+		500 * 1024 * 1024,  // 500MB
+		1024 * 1024 * 1024, // 1GB
+	}
+
+	for _, size := range testSizes {
+		// Try to allocate memory
+		buf := make([]byte, size)
+		if buf == nil {
+			return fmt.Errorf("cannot allocate %d MB of memory", size/(1024*1024))
+		}
+
+		// Test memory access
+		for i := 0; i < len(buf); i += 1024 {
+			buf[i] = byte(i % 256)
+		}
+
+		// Force garbage collection to free memory
+		runtime.GC()
+	}
+
+	return nil
+}
+
+// validateDisk checks disk space and I/O capabilities
+func validateDisk() error {
+	// Check current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot get current working directory: %v", err)
+	}
+
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(cwd, &stat); err != nil {
+		return fmt.Errorf("cannot check filesystem: %v", err)
+	}
+
+	// Calculate available space
+	availableBytes := stat.Bavail * uint64(stat.Bsize)
+	availableGB := availableBytes / (1024 * 1024 * 1024)
+
+	if availableGB < 5 {
+		return fmt.Errorf("insufficient disk space: %d GB available (minimum 5GB recommended for fuzzing)", availableGB)
+	}
+
+	// Test disk I/O performance
+	if err := testDiskIO(); err != nil {
+		return fmt.Errorf("disk I/O test failed: %v", err)
+	}
+
+	return nil
+}
+
+// testDiskIO tests disk I/O performance
+func testDiskIO() error {
+	// Create a temporary file for I/O testing
+	tempFile, err := os.CreateTemp("", "akaylee_io_test_")
+	if err != nil {
+		return fmt.Errorf("cannot create temporary file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Test write performance
+	testData := make([]byte, 10*1024*1024) // 10MB
+	for i := range testData {
+		testData[i] = byte(i % 256)
+	}
+
+	start := time.Now()
+	_, err = tempFile.Write(testData)
+	if err != nil {
+		return fmt.Errorf("write test failed: %v", err)
+	}
+	tempFile.Sync()
+
+	writeTime := time.Since(start)
+	writeSpeed := float64(len(testData)) / writeTime.Seconds() / (1024 * 1024) // MB/s
+
+	if writeSpeed < 10 { // Less than 10 MB/s
+		return fmt.Errorf("disk write speed too slow: %.1f MB/s (minimum 10 MB/s recommended)", writeSpeed)
+	}
+
+	// Test read performance
+	tempFile.Seek(0, 0)
+	readData := make([]byte, len(testData))
+
+	start = time.Now()
+	_, err = tempFile.Read(readData)
+	if err != nil {
+		return fmt.Errorf("read test failed: %v", err)
+	}
+
+	readTime := time.Since(start)
+	readSpeed := float64(len(readData)) / readTime.Seconds() / (1024 * 1024) // MB/s
+
+	if readSpeed < 20 { // Less than 20 MB/s
+		return fmt.Errorf("disk read speed too slow: %.1f MB/s (minimum 20 MB/s recommended)", readSpeed)
+	}
+
+	return nil
+}
+
+// validateProcessCapabilities checks if we can spawn and manage processes
+func validateProcessCapabilities() error {
+	// Test basic process spawning
+	cmd := exec.Command("echo", "test")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cannot spawn basic processes: %v", err)
+	}
+
+	// Test process with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd = exec.CommandContext(ctx, "sleep", "1")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cannot spawn processes with timeout: %v", err)
+	}
+
+	// Test process with environment variables
+	cmd = exec.Command("env")
+	cmd.Env = append(os.Environ(), "AKAYLEE_TEST=1")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("cannot spawn processes with custom environment: %v", err)
+	}
+
+	if !strings.Contains(string(output), "AKAYLEE_TEST=1") {
+		return fmt.Errorf("environment variable not passed to child process")
+	}
+
+	return nil
+}
+
+// validateFileSystem checks file system permissions and capabilities
+func validateFileSystem() error {
+	// Test file creation
+	testFile := "akaylee_test_file"
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		return fmt.Errorf("cannot create files: %v", err)
+	}
+	defer os.Remove(testFile)
+
+	// Test file reading
+	if _, err := os.ReadFile(testFile); err != nil {
+		return fmt.Errorf("cannot read files: %v", err)
+	}
+
+	// Test directory creation
+	testDir := "akaylee_test_dir"
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		return fmt.Errorf("cannot create directories: %v", err)
+	}
+	defer os.Remove(testDir)
+
+	// Test file in subdirectory
+	subFile := filepath.Join(testDir, "test.txt")
+	if err := os.WriteFile(subFile, []byte("test"), 0644); err != nil {
+		return fmt.Errorf("cannot create files in subdirectories: %v", err)
+	}
+
+	// Test file permissions
+	if err := os.Chmod(testFile, 0400); err != nil {
+		return fmt.Errorf("cannot change file permissions: %v", err)
+	}
+
+	// Test symbolic links (if supported)
+	if runtime.GOOS != "windows" {
+		symlink := "akaylee_test_symlink"
+		if err := os.Symlink(testFile, symlink); err == nil {
+			os.Remove(symlink)
+		}
+	}
+
+	return nil
+}
+
+// validateNetwork checks network connectivity (optional)
+func validateNetwork() string {
+	// Test basic connectivity
+	timeout := 5 * time.Second
+
+	// Test DNS resolution
+	conn, err := net.DialTimeout("tcp", "8.8.8.8:53", timeout)
+	if err != nil {
+		return "No internet connectivity detected (optional for local fuzzing)"
+	}
+	conn.Close()
+
+	// Test HTTP connectivity
+	conn, err = net.DialTimeout("tcp", "httpbin.org:80", timeout)
+	if err != nil {
+		return "Limited internet connectivity (optional for local fuzzing)"
+	}
+	conn.Close()
+
+	return ""
 }
