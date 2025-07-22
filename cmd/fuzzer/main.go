@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: main.go
 Description: Main command-line interface for the Akaylee Fuzzer. Provides comprehensive
 command-line options, configuration management, and beautiful user interface for
-controlling the fuzzing process.
+controlling the fuzzing process with advanced logging capabilities.
 */
 
 package main
@@ -19,6 +19,7 @@ import (
 
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
+	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -64,7 +65,17 @@ var (
 	enableGC      bool
 	profileCPU    bool
 	profileMemory bool
+
+	// Logging configuration
+	logDir      string
+	logFormat   string
+	logMaxFiles int
+	logMaxSize  int64
+	logCompress bool
 )
+
+// Global logger instance
+var logger *logging.Logger
 
 func main() {
 	// Create root command
@@ -83,9 +94,21 @@ cases in target applications with exceptional efficiency.`,
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "Logging level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().BoolVar(&jsonLogs, "json-logs", false, "Use JSON log format")
 
+	// Add logging-specific flags
+	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", "./logs", "Log output directory")
+	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "custom", "Log format (text, json, custom)")
+	rootCmd.PersistentFlags().IntVar(&logMaxFiles, "log-max-files", 10, "Maximum number of log files to keep")
+	rootCmd.PersistentFlags().Int64Var(&logMaxSize, "log-max-size", 100*1024*1024, "Maximum log file size in bytes")
+	rootCmd.PersistentFlags().BoolVar(&logCompress, "log-compress", false, "Compress rotated log files")
+
 	// Bind flags to viper
 	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
 	viper.BindPFlag("json_logs", rootCmd.PersistentFlags().Lookup("json-logs"))
+	viper.BindPFlag("log_dir", rootCmd.PersistentFlags().Lookup("log-dir"))
+	viper.BindPFlag("log_format", rootCmd.PersistentFlags().Lookup("log-format"))
+	viper.BindPFlag("log_max_files", rootCmd.PersistentFlags().Lookup("log-max-files"))
+	viper.BindPFlag("log_max_size", rootCmd.PersistentFlags().Lookup("log-max-size"))
+	viper.BindPFlag("log_compress", rootCmd.PersistentFlags().Lookup("log-compress"))
 
 	// Add fuzz command
 	fuzzCmd := &cobra.Command{
@@ -173,6 +196,7 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 	if err := setupLogging(); err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
+	defer logger.Close()
 
 	// Create fuzzer configuration
 	config := createFuzzerConfig()
@@ -192,12 +216,20 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		sig := <-sigChan
-		logrus.Infof("Received signal %v, shutting down gracefully...", sig)
+		logger.Info("Received shutdown signal", map[string]interface{}{
+			"signal": sig.String(),
+		})
 		cancel()
 	}()
 
 	// Start fuzzer
-	logrus.Info("Starting Akaylee Fuzzer...")
+	logger.Info("Starting Akaylee Fuzzer", map[string]interface{}{
+		"target":     config.TargetPath,
+		"workers":    config.Workers,
+		"corpus_dir": config.CorpusDir,
+		"strategy":   config.Strategy,
+	})
+
 	if err := engine.Start(); err != nil {
 		return fmt.Errorf("failed to start fuzzer: %w", err)
 	}
@@ -209,7 +241,7 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 	<-ctx.Done()
 
 	// Stop fuzzer
-	logrus.Info("Stopping fuzzer...")
+	logger.Info("Stopping fuzzer", map[string]interface{}{})
 	if err := engine.Stop(); err != nil {
 		return fmt.Errorf("failed to stop fuzzer: %w", err)
 	}
@@ -249,20 +281,43 @@ func loadConfig() error {
 
 // setupLogging configures the logging system
 func setupLogging() error {
-	level, err := logrus.ParseLevel(viper.GetString("log_level"))
-	if err != nil {
-		level = logrus.InfoLevel
+	// Determine log format
+	var logFormat logging.LogFormat
+	switch viper.GetString("log_format") {
+	case "json":
+		logFormat = logging.LogFormatJSON
+	case "text":
+		logFormat = logging.LogFormatText
+	case "custom":
+		logFormat = logging.LogFormatCustom
+	default:
+		logFormat = logging.LogFormatCustom
 	}
-	logrus.SetLevel(level)
 
-	if viper.GetBool("json_logs") {
-		logrus.SetFormatter(&logrus.JSONFormatter{})
-	} else {
-		logrus.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-			ForceColors:   true,
-		})
+	// Create logger configuration
+	logConfig := &logging.LoggerConfig{
+		Level:     logging.LogLevel(viper.GetString("log_level")),
+		Format:    logFormat,
+		OutputDir: viper.GetString("log_dir"),
+		MaxFiles:  viper.GetInt("log_max_files"),
+		MaxSize:   viper.GetInt64("log_max_size"),
+		Timestamp: true,
+		Caller:    true,
+		Colors:    true,
+		Compress:  viper.GetBool("log_compress"),
 	}
+
+	// Create logger
+	var err error
+	logger, err = logging.NewLogger(logConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
+	}
+
+	// Set global logrus logger to use our logger
+	logrus.SetOutput(logger.GetLogger().Out)
+	logrus.SetFormatter(logger.GetLogger().Formatter)
+	logrus.SetLevel(logger.GetLogger().Level)
 
 	return nil
 }
@@ -323,8 +378,17 @@ func reportStats(ctx context.Context, engine *core.Engine) {
 			return
 		case <-ticker.C:
 			stats := engine.GetStats()
-			logrus.Infof("Stats: Executions=%d, Crashes=%d, Hangs=%d, Exec/sec=%.2f",
-				stats.Executions, stats.Crashes, stats.Hangs, stats.ExecutionsPerSecond)
+			logger.LogStats(
+				stats.Executions,
+				stats.Crashes,
+				stats.Hangs,
+				stats.ExecutionsPerSecond,
+				map[string]interface{}{
+					"unique_crashes":  stats.UniqueCrashes,
+					"coverage_edges":  stats.CoverageEdges,
+					"coverage_blocks": stats.CoverageBlocks,
+				},
+			)
 		}
 	}
 }
@@ -332,6 +396,19 @@ func reportStats(ctx context.Context, engine *core.Engine) {
 // printFinalStats prints final fuzzer statistics
 func printFinalStats(engine *core.Engine) {
 	stats := engine.GetStats()
+
+	logger.Info("Final Statistics", map[string]interface{}{
+		"total_executions":       stats.Executions,
+		"total_crashes":          stats.Crashes,
+		"total_hangs":            stats.Hangs,
+		"total_timeouts":         stats.Timeouts,
+		"unique_crashes":         stats.UniqueCrashes,
+		"coverage_edges":         stats.CoverageEdges,
+		"coverage_blocks":        stats.CoverageBlocks,
+		"avg_executions_per_sec": stats.ExecutionsPerSecond,
+		"total_runtime":          time.Since(stats.StartTime),
+		"last_crash_time":        stats.LastCrashTime,
+	})
 
 	fmt.Println("\n=== Final Statistics ===")
 	fmt.Printf("Total Executions: %d\n", stats.Executions)
