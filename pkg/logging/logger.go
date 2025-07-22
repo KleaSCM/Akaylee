@@ -54,12 +54,49 @@ type LoggerConfig struct {
 	Compress  bool      `json:"compress"`
 }
 
+// Validate checks the LoggerConfig for invalid or missing values.
+// Returns an error if the config is invalid, or nil if valid.
+func (c *LoggerConfig) Validate() error {
+	if c.OutputDir == "" {
+		return fmt.Errorf("output_dir must not be empty")
+	}
+	if c.MaxFiles <= 0 {
+		return fmt.Errorf("max_files must be positive")
+	}
+	if c.MaxSize <= 0 {
+		return fmt.Errorf("max_size must be positive")
+	}
+	switch c.Format {
+	case LogFormatJSON, LogFormatText, LogFormatCustom:
+		// ok
+	default:
+		return fmt.Errorf("unsupported log format: %s", c.Format)
+	}
+	switch c.Level {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelFatal:
+		// ok
+	default:
+		return fmt.Errorf("unsupported log level: %s", c.Level)
+	}
+	return nil
+}
+
+type logEntry struct {
+	level  logrus.Level
+	msg    string
+	fields logrus.Fields
+}
+
 // Logger provides comprehensive logging functionality
+// Now supports async log queue for high performance
 type Logger struct {
 	config     *LoggerConfig
 	logger     *logrus.Logger
 	fileHandle *os.File
 	startTime  time.Time
+
+	logQueue chan logEntry
+	quit     chan struct{}
 }
 
 // NewLogger creates a new logger instance
@@ -82,11 +119,15 @@ func NewLogger(config *LoggerConfig) (*Logger, error) {
 		config:    config,
 		logger:    logrus.New(),
 		startTime: time.Now(),
+		logQueue:  make(chan logEntry, 1024),
+		quit:      make(chan struct{}),
 	}
 
 	if err := l.setup(); err != nil {
 		return nil, fmt.Errorf("failed to setup logger: %w", err)
 	}
+
+	go l.runLogQueue()
 
 	return l, nil
 }
@@ -253,31 +294,16 @@ func (l *Logger) cleanup() error {
 	return nil
 }
 
-// Log methods with structured fields
-
-// Debug logs a debug message
-func (l *Logger) Debug(msg string, fields map[string]interface{}) {
-	l.logger.WithFields(fields).Debug(msg)
-}
-
-// Info logs an info message
-func (l *Logger) Info(msg string, fields map[string]interface{}) {
-	l.logger.WithFields(fields).Info(msg)
-}
-
-// Warning logs a warning message
-func (l *Logger) Warning(msg string, fields map[string]interface{}) {
-	l.logger.WithFields(fields).Warn(msg)
-}
-
-// Error logs an error message
-func (l *Logger) Error(msg string, fields map[string]interface{}) {
-	l.logger.WithFields(fields).Error(msg)
-}
-
-// Fatal logs a fatal message and exits
-func (l *Logger) Fatal(msg string, fields map[string]interface{}) {
-	l.logger.WithFields(fields).Fatal(msg)
+// runLogQueue flushes log entries from the queue in a background goroutine
+func (l *Logger) runLogQueue() {
+	for {
+		select {
+		case entry := <-l.logQueue:
+			l.logger.WithFields(entry.fields).Log(entry.level, entry.msg)
+		case <-l.quit:
+			return
+		}
+	}
 }
 
 // Fuzzer-specific logging methods
@@ -362,6 +388,7 @@ func (l *Logger) LogStats(executions int64, crashes int64, hangs int64, execPerS
 
 // Close closes the logger and performs cleanup
 func (l *Logger) Close() error {
+	close(l.quit)
 	if l.fileHandle != nil {
 		l.fileHandle.Close()
 	}
@@ -376,4 +403,29 @@ func (l *Logger) Close() error {
 // GetLogger returns the underlying logrus logger
 func (l *Logger) GetLogger() *logrus.Logger {
 	return l.logger
+}
+
+// Debug logs a debug message (async)
+func (l *Logger) Debug(msg string, fields map[string]interface{}) {
+	l.logQueue <- logEntry{level: logrus.DebugLevel, msg: msg, fields: fields}
+}
+
+// Info logs an info message (async)
+func (l *Logger) Info(msg string, fields map[string]interface{}) {
+	l.logQueue <- logEntry{level: logrus.InfoLevel, msg: msg, fields: fields}
+}
+
+// Warning logs a warning message (async)
+func (l *Logger) Warning(msg string, fields map[string]interface{}) {
+	l.logQueue <- logEntry{level: logrus.WarnLevel, msg: msg, fields: fields}
+}
+
+// Error logs an error message (async)
+func (l *Logger) Error(msg string, fields map[string]interface{}) {
+	l.logQueue <- logEntry{level: logrus.ErrorLevel, msg: msg, fields: fields}
+}
+
+// Fatal logs a fatal message and exits (async)
+func (l *Logger) Fatal(msg string, fields map[string]interface{}) {
+	l.logQueue <- logEntry{level: logrus.FatalLevel, msg: msg, fields: fields}
 }

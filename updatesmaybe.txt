@@ -1,0 +1,289 @@
+🔗 2. Crosslink With Symbolic Execution (Future)
+🧬 3. Differential Path Discovery
+
+🔁 1. Testcase Queue Scheduler
+
+You already track execution priority. Add:
+
+type Scheduler interface {
+  Next() *TestCase
+  Push(tc *TestCase)
+}
+
+    Plug in a weighted random / coverage-guided scheduler.
+
+    Now you're at libAFL level sophistication.
+
+🧬 2. Mutator Chain Composition
+
+Build a way to compose multiple Mutator instances:
+
+type CompositeMutator struct {
+  mutators []Mutator
+}
+
+This allows random chaining of:
+
+    Bit flips
+
+    Arithmetic mutations
+
+    Structured grammar shifts (for JSON/XML)
+
+📊 3. Simple Telemetry Hooks
+
+Expose ExecutionResult and corpus evolution to a listener or reporter:
+
+type Reporter interface {
+  OnTestCaseExecuted(result *ExecutionResult)
+}
+
+Pair this with a live UI or logs to visualize fuzzing entropy / coverage curve.
+
+
+Maybe support syslog/journal logging or gRPC hooks for external log ingestion in enterprise setups?
+
+Add LoggerConfig.Validate() method to proactively guard bad input
+
+Add async/log-queue flushing later if perf is a concern
+
+
+✨ Prometheus exporter from LogStats + LogAnalysis
+📊 Live TUI dashboard that reads .AnalyzeLogs() every 5s and shows metrics
+🧠 Add regex or ruleset matcher for "interesting crashes" or "likely OOB"
+
+
+Mark some structs or interfaces with Go doc comments for automatic godoc generation.
+
+Consider adding an interface for Coverage abstraction if you ever want to support multiple coverage bitmap implementations.
+
+Maybe add a Reset() method to Executor or Analyzer interfaces for hot reload or config reload.
+
+Mutator might benefit from an Init method if you want stateful mutators.
+
+TestCase could embed a timestamp for last execution, or a field like Seed for random seed origin if needed.
+
+You might consider factoring out the repeated core → interface and interface → core conversions into small helper functions to reduce boilerplate.
+
+In Execute, you convert the test case but omit Coverage— intentional? If Coverage is meaningful at execution input, consider adding it for completeness.
+
+For ExecutionResult, your mapping excludes Coverage, CrashInfo, and HangInfo. If those are used downstream, add them here to preserve full fidelity.
+
+Consider documenting each adapter struct and method with Go doc comments so godoc tools can pick them up neatly.
+
+For thread-safety or concurrency concerns, make sure underlying executors, analyzers, and mutators are safe or document expectations.
+
+
+Sorting efficiency:
+
+    You use nested loops for sorting which is O(n²). Since Go has sort.Slice, use it for better performance and readability:
+
+sort.Slice(testCases, func(i, j int) bool {
+    scoreI := c.calculateRemovalScore(testCases[i])
+    scoreJ := c.calculateRemovalScore(testCases[j])
+    return scoreI > scoreJ
+})
+
+This replaces your double for-loop with a standard, optimized sort.
+
+Seeding randomness:
+
+    You call rand.Seed(time.Now().UnixNano()) inside GetRandom, meaning every call reseeds RNG — generally better to seed once (e.g., in NewCorpus) to avoid unintended side effects or deterministic patterns.
+
+size consistency:
+
+    You maintain size manually. Consider using len(c.testCases) directly in read-only getters to avoid any subtle desync risk unless you have a performance reason to cache it.
+
+Error handling:
+
+    Add silently returns nil if the test case exists. You might want to distinguish that case explicitly or return a sentinel error to signal "already exists" if callers need to react differently.
+
+Extend Add cleanup trigger:
+
+    In Add, you call cleanup only once before adding, but if after cleanup corpus still exceeds maxSize, the addition might still cause overflow. Possibly loop cleanup until enough space or refuse addition.
+
+Doc on GetRandom:
+
+    It currently returns nil f
+
+    Consider indexed data structures:
+
+        For heavy corpus use, think about adding priority-indexed or coverage-indexed structures to speed up sorted retrieval or cleanup decisions in O(log n) or O(1), but that’s a heavier refactor.
+
+Example quick refactor for sorting & seeding:
+
+func NewCorpus() *Corpus {
+	rand.Seed(time.Now().UnixNano())
+	return &Corpus{
+		testCases: make(map[string]*TestCase),
+		maxSize:   10000,
+	}
+}
+
+func (c *Corpus) cleanupInternal() int {
+	if c.size <= c.maxSize {
+		return 0
+	}
+
+	testCases := make([]*TestCase, 0, c.size)
+	for _, tc := range c.testCases {
+		testCases = append(testCases, tc)
+	}
+
+	sort.Slice(testCases, func(i, j int) bool {
+		scoreI := c.calculateRemovalScore(testCases[i])
+		scoreJ := c.calculateRemovalScore(testCases[j])
+		return scoreI > scoreJ
+	})
+
+	toRemove := c.size - c.maxSize
+	if toRemove > len(testCases) {
+		toRemove = len(testCases)
+	}
+
+	removed := 0
+	for i := len(testCases) - toRemove; i < len(testCases); i++ {
+		delete(c.testCases, testCases[i].ID)
+		removed++
+	}
+
+	c.size -= removed
+	return removed
+}
+
+
+Mutex type for Put and Get:
+
+    You're using mu.Lock() for all mutating ops, which is correct. Just note Peek, Size, IsEmpty use RLock() so readers don't block each other.
+
+Heap shrinking after removals:
+
+    When removing a test case in Remove, you replace the removed item with the last element and then only bubble down. You might also need to call bubbleUp in case the moved element has higher priority than its new parent. So better to do both or check priority difference.
+
+Optimize Remove:
+
+    Currently linear scan on the heap array to find testCaseID. For large queues, this is O(n) and can slow down.
+
+    If your use case often updates or removes by ID, consider maintaining a map from ID → heap index for O(1) lookup.
+
+GetBatch behavior:
+
+    GetBatch removes top elements from the queue, effectively shrinking it, which is fine if intended. Just be aware if you want a "peek multiple" version instead that doesn’t remove.
+
+Avoid redundant size variable:
+
+    len(pq.heap) gives you the current size always, so you might remove pq.size field or keep it synced. Currently you update it correctly, so this is a minor note.
+
+lastAccess updates:
+
+    You update lastAccess only in Put, Get, and GetBatch — looks good as these are active ops.
+
+
+    . Resource monitoring loop termination:
+
+In your monitorResources function:
+
+for {
+    select {
+    case <-ctx.Done():
+        break
+    case <-ticker.C:
+        // ...
+    }
+}
+
+The break only exits the select, not the loop. So the loop keeps running infinitely. You want to return or use a label with break for the outer loop:
+
+for {
+    select {
+    case <-ctx.Done():
+        return peakMemory, avgCPU, nil
+    case <-ticker.C:
+        // ...
+    }
+}
+
+This is a critical fix to avoid a goroutine leak.
+
+
+. CPU usage placeholder:
+
+You clearly marked that your getCPUUsage() is simplified and returns zero. For real usage stats, you’d need:
+
+    On Linux, read /proc/[pid]/stat or use cgroups.
+
+    On Windows/macOS, use platform-specific APIs or libraries.
+
+If you want, I can help craft a cross-platform CPU measurement function.
+3. Timeout usage:
+
+You create a context with timeout:
+
+_, execCancel := context.WithTimeout(w.ctx, 30*time.Second)
+defer execCancel()
+
+But the new context is unused — you should pass it to executor.Execute() if it supports context cancellation, or wrap the call with a select on timeout.
+
+Example (hypothetical, if executor accepts context):
+
+ctx, cancel := context.WithTimeout(w.ctx, 30*time.Second)
+defer cancel()
+
+execResult, err := w.executor.ExecuteWithContext(ctx, testCase)
+
+If not supported, you could launch execution in a goroutine with timeout monitoring.
+
+Execution count locking:
+
+You lock/unlock around incrementing executions:
+
+w.mu.Lock()
+w.executions++
+w.mu.Unlock()
+
+Alternatively, you can use atomic operations (sync/atomic.AddInt64) for better performance on counters.
+5. Status update precedence:
+
+If both crash and hang detected, your code sets StatusCrash then StatusHang, so final status will be StatusHang. If you want a priority order (e.g., crash overrides hang), consider:
+
+if crash detected {
+    result.Status = StatusCrash
+} else if hang detected {
+    result.Status = StatusHang
+}
+
+
+Minor polishing suggestion for resource stats update:
+
+func (w *Worker) updateResourceStats(memory uint64, cpu float64) {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+
+    if memory > w.peakMemory {
+        w.peakMemory = memory
+    }
+
+    // Weighted moving average for CPU
+    if w.avgCPU == 0 {
+        w.avgCPU = cpu
+    } else {
+        const alpha = 0.5
+        w.avgCPU = alpha*cpu + (1-alpha)*w.avgCPU
+    }
+}
+
+TestCase Metadata could be typed or wrapped in a custom struct to avoid excessive use of interface{}, but keeping it flexible is often practical for fuzzers.
+
+For ExecutionStatus, consider implementing String() string method for better logging/readability.
+
+ResourceUsage tracking could be extended with other OS-level metrics later (network, file handles).
+
+Consider adding some validation or factory methods for TestCase and FuzzerConfig to enforce required fields or sane defaults.
+
+If some parts of the fuzzer are performance sensitive, caching hash calculations for coverage or crash hashes might help.
+
+The Coverage.Hash is a uint64 while CrashInfo.Hash is a string—just make sure you have a consistent hashing scheme for deduplication.
+
+
+
+

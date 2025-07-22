@@ -39,8 +39,8 @@ type Engine struct {
 	mutators []interfaces.Mutator
 
 	// Corpus management
-	corpus *Corpus
-	queue  *PriorityQueue
+	corpus    *Corpus
+	scheduler Scheduler // Use Scheduler abstraction
 
 	// Type conversion helpers
 	interfaceToCore func(*interfaces.TestCase) *TestCase
@@ -65,6 +65,7 @@ type Engine struct {
 
 	coverageCollector  coverage.CoverageCollector // For real code coverage
 	seenCoverageHashes map[string]bool            // To avoid duplicate coverage
+	reporters          []Reporter                 // Registered reporters for telemetry
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -76,7 +77,7 @@ func NewEngine() *Engine {
 		},
 		logger:             logrus.New(),
 		corpus:             NewCorpus(),
-		queue:              NewPriorityQueue(),
+		scheduler:          NewPriorityScheduler(), // Default to priority scheduler
 		seenCoverageHashes: make(map[string]bool),
 	}
 }
@@ -177,6 +178,11 @@ func (e *Engine) SetMutators(mutators []interfaces.Mutator) {
 // SetCoverageCollector sets the coverage collector for the engine
 func (e *Engine) SetCoverageCollector(collector coverage.CoverageCollector) {
 	e.coverageCollector = collector
+}
+
+// AddReporter registers a Reporter for telemetry and live reporting.
+func (e *Engine) AddReporter(reporter Reporter) {
+	e.reporters = append(e.reporters, reporter)
 }
 
 // setupLogging configures the logging system based on configuration
@@ -330,17 +336,17 @@ func (e *Engine) Stop() error {
 }
 
 // runWorker is the main worker loop
-// Continuously processes test cases from the queue until stopped
+// Continuously processes test cases from the scheduler until stopped
 func (e *Engine) runWorker(worker *Worker) {
 	for {
 		select {
 		case <-e.ctx.Done():
 			return
 		default:
-			// Get test case from queue
-			testCase := e.queue.Get()
+			// Get test case from scheduler
+			testCase := e.scheduler.Next()
 			if testCase == nil {
-				// Queue is empty, try to generate new test cases
+				// Scheduler is empty, try to generate new test cases
 				e.generateTestCases()
 				time.Sleep(10 * time.Millisecond)
 				continue
@@ -377,7 +383,7 @@ func (e *Engine) runScheduler() {
 			e.updateQueuePriorities()
 
 			// Generate new test cases if needed
-			if e.queue.Size() < e.config.MaxCorpusSize/2 {
+			if e.scheduler.Size() < e.config.MaxCorpusSize/2 {
 				e.generateTestCases()
 			}
 
@@ -420,9 +426,13 @@ func (e *Engine) generateTestCases() {
 			coreMutated := e.interfaceToCore(mutated)
 			coreMutated.Priority = e.calculatePriority(coreMutated)
 
-			// Add to corpus and queue
+			// Add to corpus and scheduler
 			if err := e.corpus.Add(coreMutated); err == nil {
-				e.queue.Put(coreMutated)
+				e.scheduler.Push(coreMutated)
+				// Notify reporters of new test case
+				for _, r := range e.reporters {
+					r.OnTestCaseAdded(coreMutated)
+				}
 			}
 		}
 	}
@@ -521,7 +531,12 @@ func (e *Engine) processResult(result *ExecutionResult) {
 	// Check if test case is interesting (new coverage or analyzer says so)
 	if newCoverage || e.analyzer.IsInteresting(testCase) {
 		testCase.Priority = e.calculatePriority(testCase) + 100 // Boost for new coverage
-		e.queue.Put(testCase)
+		e.scheduler.Push(testCase)
+	}
+
+	// Notify reporters of execution
+	for _, r := range e.reporters {
+		r.OnTestCaseExecuted(result)
 	}
 }
 
