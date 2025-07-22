@@ -98,33 +98,22 @@ type ResourceUsage struct {
 	IOWrite    uint64
 }
 
-// FuzzerConfig represents the configuration for the fuzzer
+// FuzzerConfig holds configuration for the fuzzer
 type FuzzerConfig struct {
-	TargetPath    string
-	TargetArgs    []string
-	TargetEnv     []string
-	Workers       int
-	Timeout       time.Duration
-	MemoryLimit   uint64
-	CorpusDir     string
-	OutputDir     string
-	MaxCorpusSize int
-	MutationRate  float64
-	MaxMutations  int
-	Strategy      string
-	CoverageType  string
-	BitmapSize    int
-	EdgeThreshold int
-	MaxCrashes    int
-	CrashDir      string
-	Reproduce     bool
-	EnableGC      bool
-	ProfileCPU    bool
-	ProfileMemory bool
-	LogLevel      string
-	LogFile       string
-	JSONLogs      bool
-	SchedulerType string // Scheduler type: "priority" (default), "coverage-guided", etc.
+	Target        string        `json:"target"`
+	CorpusDir     string        `json:"corpus_dir"`
+	OutputDir     string        `json:"output_dir"`
+	CrashDir      string        `json:"crash_dir"`
+	Workers       int           `json:"workers"`
+	Timeout       time.Duration `json:"timeout"`
+	MemoryLimit   int64         `json:"memory_limit"`
+	MaxCorpusSize int           `json:"max_corpus_size"`
+	MutationRate  float64       `json:"mutation_rate"`
+	MaxMutations  int           `json:"max_mutations"`
+	Strategy      string        `json:"strategy"`
+	CoverageType  string        `json:"coverage_type"`
+	SchedulerType string        `json:"scheduler_type"`
+	SessionID     string        `json:"session_id"` // Persistent session UUID for correlation
 }
 
 // Executor interface for executing test cases

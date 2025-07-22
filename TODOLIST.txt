@@ -20,6 +20,11 @@ Akaylee Fuzzer TODO
 [x] Adapter refactor and execution result mapping
 [x] Thread safety & performance improvements
 [x] Resource monitoring fixes (goroutine leak, avgCPU helper)
+[x] --dry-run Mode (configuration validation without fuzzing)
+[x] --list-mutators Option (display all available mutators)
+[x] Persistent Session UUID (correlation across systems)
+[x] Built-in Self-Check (system validation for CI/CD)
+[x] Automatic Corpus Shrinking (keep only most interesting cases)
 
 [ ] Advanced input structure inference (grammar-based, protocol-aware)
 [ ] Crash triage and minimization
@@ -31,6 +36,7 @@ Akaylee Fuzzer TODO
 [ ] Advanced resource monitoring (CPU/mem per test)
 [ ] Seed corpus auto-expansion (from real-world data)
 [ ] Fuzzing for non-binary targets (APIs, network, etc.)
+[ ] Future Option: Plugin Support (.so plugins for mutators and execution strategies)
 
 
 
@@ -40,118 +46,3 @@ Akaylee Fuzzer TODO
 
 
 
-------
-
-
-
-
-
-
-Add a --dry-run Mode
-
-To verify target setup, configuration parsing, and file permissions without starting fuzzing:
-
-fuzzCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Validate configuration and exit")
-
-Check for it early in runFuzz() and just print out config + validation results.
-2. Expose a --list-mutators Option
-
-Let users print all available mutators (especially once grammar-based ones grow):
-
-// Add a command
-rootCmd.AddCommand(&cobra.Command{
-    Use:   "list-mutators",
-    Short: "List available mutators",
-    Run: func(cmd *cobra.Command, args []string) {
-        fmt.Println("Available mutators:")
-        fmt.Println(" - bitflip")
-        fmt.Println(" - bytesub")
-        fmt.Println(" - arithmetic")
-        fmt.Println(" - crossover")
-        fmt.Println(" - structure-aware")
-        fmt.Println(" - grammar (if --grammar is set)")
-    },
-})
-
-3. Persistent Session UUID
-
-Each fuzzing session could generate a UUID and log it, so outputs can be correlated across distributed systems/logs:
-
-sessionID := uuid.New().String()
-logger.Info("Session started", map[string]interface{}{"session_id": sessionID})
-
-4. Automatic Corpus Shrinking (Optional)
-
-Over time, the corpus might bloat. Introduce optional --shrink-corpus logic that keeps only most interesting cases (e.g., unique edge paths or crash triggers).
-5. Add a Built-in Self-Check
-
-Example: a check subcommand that verifies binary exists, corpus directory is accessible, logs can be written, etc. Very useful for CI/CD integration.
-6. Future Option: Plugin Support
-structure mutators and execution strategy could support user-defined .so plugins with plugin.Open() down the line.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-flowchart TD
-    subgraph Fuzzer_Engine
-        A[Scheduler] -->|Next/Push| B[Worker]
-        B -->|Execute| C[Executor]
-        B -->|Analyze| D[Analyzer]
-        B -->|Mutate| E[Mutator/CompositeMutator]
-        B -->|Report| F[Reporter]
-        F -->|Log| G[Logger]
-        F -->|Prometheus| H[PrometheusExporter]
-        F -->|TUI| I[TUI Dashboard]
-        C -->|Resource| J[ResourceMonitor]
-        D -->|Coverage| K[CoverageCollector]
-        D -->|CrashMatch| L[CrashMatcher]
-        E -->|Chain| M[BitFlip/Arithmetic/Structure/CrossOver]
-    end
-    G -->|Syslog/Journald| N[Enterprise Log Sinks]
-    G -->|Async| O[Log Queue]
-    K -->|Coverage Data| P[Corpus]
-    B -->|Corpus Ops| P
-    P -->|TestCase| B
-    style F fill:#f9e,stroke:#333,stroke-width:2px
-    style G fill:#f9e,stroke:#333,stroke-width:2px
-    style H fill:#f9e,stroke:#333,stroke-width:2px
-    style I fill:#f9e,stroke:#333,stroke-width:2px
-    style N fill:#f9e,stroke:#333,stroke-width:2px
-    style O fill:#f9e,stroke:#333,stroke-width:2px
-    style L fill:#f9e,stroke:#333,stroke-width:2px
-    style M fill:#f9e,stroke:#333,stroke-width:2px
-    style J fill:#f9e,stroke:#333,stroke-width:2px
-    style K fill:#f9e,stroke:#333,stroke-width:2px
-    style P fill:#f9e,stroke:#333,stroke-width:2px
-    style A fill:#f9e,stroke:#333,stroke-width:2px
-    style B fill:#f9e,stroke:#333,stroke-width:2px
-    style C fill:#f9e,stroke:#333,stroke-width:2px
-    style D fill:#f9e,stroke:#333,stroke-width:2px
-    style E fill:#f9e,stroke:#333,stroke-width:2px

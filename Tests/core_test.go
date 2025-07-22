@@ -81,12 +81,11 @@ func TestEngineInitialization(t *testing.T) {
 		engine.SetMutators(mutators)
 
 		config := &interfaces.FuzzerConfig{
-			TargetPath:    "/bin/echo",
+			Target:        "/bin/echo",
 			CorpusDir:     "./test_corpus",
 			Workers:       2,
 			Timeout:       5 * time.Second,
 			MaxCorpusSize: 100,
-			LogLevel:      "debug",
 		}
 
 		err := engine.Initialize(config)
@@ -96,7 +95,7 @@ func TestEngineInitialization(t *testing.T) {
 
 // TestCorpusOperations tests corpus management operations
 func TestCorpusOperations(t *testing.T) {
-	corpus := core.NewCorpus()
+	corpus := core.NewCorpus(100)
 
 	// Test adding test cases
 	testCase1 := &core.TestCase{
@@ -107,8 +106,8 @@ func TestCorpusOperations(t *testing.T) {
 		Priority:   100,
 	}
 
-	err := corpus.Add(testCase1)
-	require.NoError(t, err)
+	added := corpus.Add(testCase1)
+	require.True(t, added)
 	assert.Equal(t, 1, corpus.Size())
 
 	// Test retrieving test case
@@ -129,7 +128,7 @@ func TestCorpusOperations(t *testing.T) {
 // TestCorpusCleanup tests corpus cleanup functionality
 func TestCorpusCleanup(t *testing.T) {
 	runTest(t, "TestCorpusCleanup", func(t *testing.T) {
-		corpus := core.NewCorpus()
+		corpus := core.NewCorpus(100)
 		corpus.SetMaxSize(3)
 
 		// Add multiple test cases
@@ -401,9 +400,7 @@ func TestHangInfoCreation(t *testing.T) {
 // TestFuzzerConfigCreation tests fuzzer configuration creation
 func TestFuzzerConfigCreation(t *testing.T) {
 	config := &core.FuzzerConfig{
-		TargetPath:    "/bin/echo",
-		TargetArgs:    []string{"-n", "hello"},
-		TargetEnv:     []string{"VAR1=value1"},
+		Target:        "/bin/echo",
 		Workers:       4,
 		Timeout:       30 * time.Second,
 		MemoryLimit:   1024 * 1024,
@@ -414,25 +411,15 @@ func TestFuzzerConfigCreation(t *testing.T) {
 		MaxMutations:  5,
 		Strategy:      "mutation",
 		CoverageType:  "edge",
-		BitmapSize:    65536,
-		EdgeThreshold: 10,
-		MaxCrashes:    100,
 		CrashDir:      "./crashes",
-		Reproduce:     true,
-		EnableGC:      true,
-		ProfileCPU:    false,
-		ProfileMemory: false,
-		LogLevel:      "info",
-		LogFile:       "./fuzzer.log",
-		JSONLogs:      false,
+		SchedulerType: "priority",
+		SessionID:     "test-session",
 	}
 
-	assert.Equal(t, "/bin/echo", config.TargetPath)
-	assert.Len(t, config.TargetArgs, 2)
-	assert.Len(t, config.TargetEnv, 1)
+	assert.Equal(t, "/bin/echo", config.Target)
 	assert.Equal(t, 4, config.Workers)
 	assert.Equal(t, 30*time.Second, config.Timeout)
-	assert.Equal(t, uint64(1024*1024), config.MemoryLimit)
+	assert.Equal(t, int64(1024*1024), config.MemoryLimit)
 	assert.Equal(t, "./corpus", config.CorpusDir)
 	assert.Equal(t, "./output", config.OutputDir)
 	assert.Equal(t, 1000, config.MaxCorpusSize)
@@ -440,17 +427,9 @@ func TestFuzzerConfigCreation(t *testing.T) {
 	assert.Equal(t, 5, config.MaxMutations)
 	assert.Equal(t, "mutation", config.Strategy)
 	assert.Equal(t, "edge", config.CoverageType)
-	assert.Equal(t, 65536, config.BitmapSize)
-	assert.Equal(t, 10, config.EdgeThreshold)
-	assert.Equal(t, 100, config.MaxCrashes)
 	assert.Equal(t, "./crashes", config.CrashDir)
-	assert.True(t, config.Reproduce)
-	assert.True(t, config.EnableGC)
-	assert.False(t, config.ProfileCPU)
-	assert.False(t, config.ProfileMemory)
-	assert.Equal(t, "info", config.LogLevel)
-	assert.Equal(t, "./fuzzer.log", config.LogFile)
-	assert.False(t, config.JSONLogs)
+	assert.Equal(t, "priority", config.SchedulerType)
+	assert.Equal(t, "test-session", config.SessionID)
 }
 
 // Test suite summary struct

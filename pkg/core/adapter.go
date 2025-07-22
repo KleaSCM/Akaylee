@@ -26,30 +26,20 @@ func NewAdapterExecutor(executor interfaces.Executor) *AdapterExecutor {
 func (a *AdapterExecutor) Initialize(config *FuzzerConfig) error {
 	// Convert core config to interface config
 	interfaceConfig := &interfaces.FuzzerConfig{
-		TargetPath:    config.TargetPath,
-		TargetArgs:    config.TargetArgs,
-		TargetEnv:     config.TargetEnv,
+		Target:        config.Target,
+		CorpusDir:     config.CorpusDir,
+		OutputDir:     config.OutputDir,
+		CrashDir:      config.CrashDir,
 		Workers:       config.Workers,
 		Timeout:       config.Timeout,
 		MemoryLimit:   config.MemoryLimit,
-		CorpusDir:     config.CorpusDir,
-		OutputDir:     config.OutputDir,
 		MaxCorpusSize: config.MaxCorpusSize,
 		MutationRate:  config.MutationRate,
 		MaxMutations:  config.MaxMutations,
 		Strategy:      config.Strategy,
 		CoverageType:  config.CoverageType,
-		BitmapSize:    config.BitmapSize,
-		EdgeThreshold: config.EdgeThreshold,
-		MaxCrashes:    config.MaxCrashes,
-		CrashDir:      config.CrashDir,
-		Reproduce:     config.Reproduce,
-		EnableGC:      config.EnableGC,
-		ProfileCPU:    config.ProfileCPU,
-		ProfileMemory: config.ProfileMemory,
-		LogLevel:      config.LogLevel,
-		LogFile:       config.LogFile,
-		JSONLogs:      config.JSONLogs,
+		SchedulerType: config.SchedulerType,
+		SessionID:     config.SessionID,
 	}
 	return a.executor.Initialize(interfaceConfig)
 }

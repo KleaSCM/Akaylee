@@ -58,7 +58,7 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 	}
 
 	// Build command: target <inputfile>
-	cmd := exec.Command(e.config.TargetPath, tmpfile.Name())
+	cmd := exec.Command(e.config.Target, tmpfile.Name())
 
 	// Set up input/output pipes
 	stdin, err := cmd.StdinPipe()
@@ -67,9 +67,8 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 	}
 
 	// Set environment variables
-	if len(e.config.TargetEnv) > 0 {
-		cmd.Env = append(os.Environ(), e.config.TargetEnv...)
-	}
+	// Set environment variables if specified (simplified for now)
+	cmd.Env = os.Environ()
 
 	// Set resource limits
 	e.setResourceLimits(cmd)

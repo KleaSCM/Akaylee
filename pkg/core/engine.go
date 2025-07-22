@@ -76,7 +76,7 @@ func NewEngine() *Engine {
 			StartTime: time.Now(),
 		},
 		logger:             logrus.New(),
-		corpus:             NewCorpus(),
+		corpus:             NewCorpus(10000),       // Default max size
 		scheduler:          NewPriorityScheduler(), // Default to priority scheduler
 		seenCoverageHashes: make(map[string]bool),
 	}
@@ -106,7 +106,7 @@ func (e *Engine) Initialize(config *interfaces.FuzzerConfig) error {
 	// Initialize coverage collector if enabled
 	if config.CoverageType == "go" {
 		collector := &coverage.GoCoverageCollector{}
-		err := collector.Prepare(config.TargetPath, config.TargetArgs)
+		err := collector.Prepare(config.Target, nil) // Use Target field, no args for now
 		if err != nil {
 			return fmt.Errorf("failed to prepare coverage collector: %w", err)
 		}
@@ -196,22 +196,10 @@ func (e *Engine) AddReporter(reporter Reporter) {
 
 // setupLogging configures the logging system based on configuration
 func (e *Engine) setupLogging() {
-	level, err := logrus.ParseLevel(e.config.LogLevel)
-	if err != nil {
-		level = logrus.InfoLevel
-	}
+	// Use default logging since config doesn't have log fields
+	level := logrus.InfoLevel
 	e.logger.SetLevel(level)
-
-	if e.config.LogFile != "" {
-		file, err := os.OpenFile(e.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			e.logger.SetOutput(file)
-		}
-	}
-
-	if e.config.JSONLogs {
-		e.logger.SetFormatter(&logrus.JSONFormatter{})
-	}
+	e.logger.SetFormatter(&logrus.TextFormatter{})
 }
 
 // initializeCorpus loads the initial seed corpus from the configured directory
@@ -249,8 +237,8 @@ func (e *Engine) initializeCorpus() error {
 				Priority:   100, // High priority for seeds
 			}
 
-			if err := e.corpus.Add(testCase); err != nil {
-				e.logger.Warnf("Failed to add seed test case: %v", err)
+			if !e.corpus.Add(testCase) {
+				e.logger.Warnf("Failed to add seed test case")
 				continue
 			}
 
@@ -436,7 +424,7 @@ func (e *Engine) generateTestCases() {
 			coreMutated.Priority = e.calculatePriority(coreMutated)
 
 			// Add to corpus and scheduler
-			if err := e.corpus.Add(coreMutated); err == nil {
+			if e.corpus.Add(coreMutated) {
 				e.scheduler.Push(coreMutated)
 				// Notify reporters of new test case
 				for _, r := range e.reporters {
@@ -656,7 +644,8 @@ func (e *Engine) GetStats() *FuzzerStats {
 
 // AddTestCase adds a test case to the corpus
 func (e *Engine) AddTestCase(testCase *TestCase) error {
-	return e.corpus.Add(testCase)
+	e.corpus.Add(testCase)
+	return nil
 }
 
 // GetTestCases returns test cases from the corpus

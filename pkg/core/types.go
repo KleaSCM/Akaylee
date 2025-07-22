@@ -142,49 +142,22 @@ func (s *FuzzerStats) IncrementTimeouts() {
 	atomic.AddInt64(&s.Timeouts, 1)
 }
 
-// FuzzerConfig contains all configuration parameters for the fuzzer
-// Supports both command-line flags and configuration files
+// FuzzerConfig holds configuration for the fuzzer
 type FuzzerConfig struct {
-	// Target configuration
-	TargetPath string   `json:"target_path"` // Path to the target binary
-	TargetArgs []string `json:"target_args"` // Command-line arguments for target
-	TargetEnv  []string `json:"target_env"`  // Environment variables for target
-
-	// Execution configuration
-	Workers     int           `json:"workers"`      // Number of parallel workers
-	Timeout     time.Duration `json:"timeout"`      // Maximum execution time per test case
-	MemoryLimit uint64        `json:"memory_limit"` // Memory limit per execution (bytes)
-	CPUAffinity []int         `json:"cpu_affinity"` // CPU cores to use (empty = all)
-
-	// Corpus configuration
-	CorpusDir     string `json:"corpus_dir"`      // Directory containing seed corpus
-	OutputDir     string `json:"output_dir"`      // Directory for fuzzer output
-	MaxCorpusSize int    `json:"max_corpus_size"` // Maximum number of test cases in corpus
-
-	// Mutation configuration
-	MutationRate float64 `json:"mutation_rate"` // Probability of mutation per byte
-	MaxMutations int     `json:"max_mutations"` // Maximum mutations per test case
-	Strategy     string  `json:"strategy"`      // Primary fuzzing strategy to use
-
-	// Coverage configuration
-	CoverageType  string `json:"coverage_type"`  // Type of coverage to track
-	BitmapSize    int    `json:"bitmap_size"`    // Size of coverage bitmap
-	EdgeThreshold int    `json:"edge_threshold"` // Minimum edges for interesting test case
-
-	// Crash configuration
-	MaxCrashes int    `json:"max_crashes"` // Maximum crashes to collect
-	CrashDir   string `json:"crash_dir"`   // Directory for crash files
-	Reproduce  bool   `json:"reproduce"`   // Whether to reproduce crashes
-
-	// Performance configuration
-	EnableGC      bool `json:"enable_gc"`      // Enable garbage collection tuning
-	ProfileCPU    bool `json:"profile_cpu"`    // Enable CPU profiling
-	ProfileMemory bool `json:"profile_memory"` // Enable memory profiling
-
-	// Logging configuration
-	LogLevel string `json:"log_level"` // Logging level (debug, info, warn, error)
-	LogFile  string `json:"log_file"`  // Log file path
-	JSONLogs bool   `json:"json_logs"` // Use JSON log format
+	Target        string        `json:"target"`
+	CorpusDir     string        `json:"corpus_dir"`
+	OutputDir     string        `json:"output_dir"`
+	CrashDir      string        `json:"crash_dir"`
+	Workers       int           `json:"workers"`
+	Timeout       time.Duration `json:"timeout"`
+	MemoryLimit   int64         `json:"memory_limit"`
+	MaxCorpusSize int           `json:"max_corpus_size"`
+	MutationRate  float64       `json:"mutation_rate"`
+	MaxMutations  int           `json:"max_mutations"`
+	Strategy      string        `json:"strategy"`
+	CoverageType  string        `json:"coverage_type"`
+	SchedulerType string        `json:"scheduler_type"`
+	SessionID     string        `json:"session_id"` // Persistent session UUID for correlation
 }
 
 // FuzzerEngine is the main interface for the fuzzing engine

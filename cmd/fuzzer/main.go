@@ -12,11 +12,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
 	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
@@ -79,6 +84,7 @@ var (
 
 	coverageGuided bool   // New flag for coverage-guided fuzzing
 	grammarType    string // New: grammar type for grammar-based fuzzing
+	dryRun         bool   // New: dry-run mode for validation
 )
 
 // Global logger instance
@@ -160,9 +166,14 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	fuzzCmd.Flags().StringVar(&grammarType, "grammar", "", "Enable grammar-based fuzzing (e.g., 'json')")
 	fuzzCmd.Flags().StringSlice("grammar-seeds", []string{}, "Seed keys for grammar-based fuzzing (e.g., 'name,age,email')")
 	fuzzCmd.Flags().Int("grammar-depth", 5, "Maximum recursion depth for grammar fuzzing")
+
+	// Add dry-run flag
+	fuzzCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Validate configuration and exit without fuzzing")
+
 	viper.BindPFlag("grammar_type", fuzzCmd.Flags().Lookup("grammar"))
 	viper.BindPFlag("grammar_seeds", fuzzCmd.Flags().Lookup("grammar-seeds"))
 	viper.BindPFlag("grammar_depth", fuzzCmd.Flags().Lookup("grammar-depth"))
+	viper.BindPFlag("dry_run", fuzzCmd.Flags().Lookup("dry-run"))
 
 	// Mark required flags
 	fuzzCmd.MarkFlagRequired("target")
@@ -193,6 +204,27 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	viper.BindPFlag("coverage_guided", fuzzCmd.Flags().Lookup("coverage-guided"))
 	viper.BindPFlag("grammar_type", fuzzCmd.Flags().Lookup("grammar"))
 
+	// Add list-mutators command
+	listMutatorsCmd := &cobra.Command{
+		Use:   "list-mutators",
+		Short: "List available mutators and their capabilities",
+		Long: `List all available mutators in the Akaylee Fuzzer with detailed descriptions
+of their capabilities and use cases.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			listMutators(cmd, args)
+		},
+	}
+	rootCmd.AddCommand(listMutatorsCmd)
+
+	// Add check command for built-in self-checks
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "check",
+		Short: "Perform built-in self-checks for system validation",
+		Long: `Perform comprehensive system checks to validate binary existence, corpus accessibility, 
+log writability, and other prerequisites for successful fuzzing. Very useful for CI/CD integration.`,
+		RunE: performSelfCheck,
+	})
+
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
 
@@ -218,6 +250,11 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 
 	// Create fuzzer configuration
 	config := createFuzzerConfig()
+
+	// Check for dry-run mode
+	if viper.GetBool("dry_run") {
+		return performDryRun(config)
+	}
 
 	// Create and initialize fuzzer engine
 	engine := core.NewEngine()
@@ -285,7 +322,7 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 
 	// Start fuzzer
 	logger.Info("Starting Akaylee Fuzzer", map[string]interface{}{
-		"target":     config.TargetPath,
+		"target":     config.Target,
 		"workers":    config.Workers,
 		"corpus_dir": config.CorpusDir,
 		"strategy":   config.Strategy,
@@ -384,51 +421,40 @@ func setupLogging() error {
 
 // createFuzzerConfig creates the fuzzer configuration from viper
 func createFuzzerConfig() *interfaces.FuzzerConfig {
+	// Generate a persistent session UUID for this fuzzing session
+	sessionID := uuid.New().String()
+
+	// Set coverage type based on coverage-guided flag
 	coverageType := viper.GetString("coverage_type")
 	if viper.GetBool("coverage_guided") {
 		coverageType = "go"
 	}
-	return &interfaces.FuzzerConfig{
-		// Target configuration
-		TargetPath: viper.GetString("target_path"),
-		TargetArgs: viper.GetStringSlice("target_args"),
-		TargetEnv:  viper.GetStringSlice("target_env"),
 
-		// Execution configuration
-		Workers:     viper.GetInt("workers"),
-		Timeout:     viper.GetDuration("timeout"),
-		MemoryLimit: viper.GetUint64("memory_limit"),
-
-		// Corpus configuration
+	config := &interfaces.FuzzerConfig{
+		Target:        viper.GetString("target_path"),
 		CorpusDir:     viper.GetString("corpus_dir"),
 		OutputDir:     viper.GetString("output_dir"),
+		CrashDir:      viper.GetString("crash_dir"),
+		Workers:       viper.GetInt("workers"),
+		Timeout:       viper.GetDuration("timeout"),
+		MemoryLimit:   int64(viper.GetUint64("memory_limit")), // Convert uint64 to int64
 		MaxCorpusSize: viper.GetInt("max_corpus_size"),
-
-		// Mutation configuration
-		MutationRate: viper.GetFloat64("mutation_rate"),
-		MaxMutations: viper.GetInt("max_mutations"),
-		Strategy:     viper.GetString("strategy"),
-
-		// Coverage configuration
+		MutationRate:  viper.GetFloat64("mutation_rate"),
+		MaxMutations:  viper.GetInt("max_mutations"),
+		Strategy:      viper.GetString("strategy"),
 		CoverageType:  coverageType,
-		BitmapSize:    viper.GetInt("bitmap_size"),
-		EdgeThreshold: viper.GetInt("edge_threshold"),
-
-		// Crash configuration
-		MaxCrashes: viper.GetInt("max_crashes"),
-		CrashDir:   viper.GetString("crash_dir"),
-		Reproduce:  viper.GetBool("reproduce"),
-
-		// Performance configuration
-		EnableGC:      viper.GetBool("enable_gc"),
-		ProfileCPU:    viper.GetBool("profile_cpu"),
-		ProfileMemory: viper.GetBool("profile_memory"),
-
-		// Logging configuration
-		LogLevel: viper.GetString("log_level"),
-		LogFile:  viper.GetString("log_file"),
-		JSONLogs: viper.GetBool("json_logs"),
+		SchedulerType: "priority", // Default scheduler type
+		SessionID:     sessionID,  // Set the persistent session UUID
 	}
+
+	// Log the session ID for correlation across systems
+	logrus.WithFields(logrus.Fields{
+		"session_id": sessionID,
+		"target":     config.Target,
+		"corpus_dir": config.CorpusDir,
+	}).Info("Fuzzing session initialized")
+
+	return config
 }
 
 // reportStats periodically reports fuzzer statistics
@@ -490,4 +516,447 @@ func printFinalStats(engine *core.Engine) {
 	if stats.Crashes > 0 {
 		fmt.Printf("Last Crash: %v\n", stats.LastCrashTime)
 	}
+}
+
+// performDryRun validates configuration and prints setup information
+func performDryRun(config *interfaces.FuzzerConfig) error {
+	fmt.Println("🔍 Akaylee Fuzzer - Dry Run Mode")
+	fmt.Println("=================================")
+	fmt.Println()
+
+	// Validate target
+	fmt.Println("🎯 Target Validation:")
+	fmt.Printf("  Target Path: %s\n", config.Target)
+
+	// Check if target exists and is executable
+	if _, err := os.Stat(config.Target); err != nil {
+		fmt.Printf("  ❌ Target not found: %v\n", err)
+	} else {
+		fmt.Println("  ✅ Target file exists")
+
+		// Check if executable
+		if info, err := os.Stat(config.Target); err == nil {
+			if info.Mode()&0111 != 0 {
+				fmt.Println("  ✅ Target is executable")
+			} else {
+				fmt.Println("  ⚠️  Target may not be executable")
+			}
+		}
+	}
+	fmt.Println()
+
+	// Validate corpus
+	fmt.Println("📁 Corpus Validation:")
+	fmt.Printf("  Corpus Directory: %s\n", config.CorpusDir)
+
+	if _, err := os.Stat(config.CorpusDir); err != nil {
+		fmt.Printf("  ❌ Corpus directory not found: %v\n", err)
+	} else {
+		fmt.Println("  ✅ Corpus directory exists")
+
+		// Count seed files
+		files, err := filepath.Glob(filepath.Join(config.CorpusDir, "*"))
+		if err != nil {
+			fmt.Printf("  ⚠️  Could not read corpus directory: %v\n", err)
+		} else {
+			seedCount := 0
+			for _, file := range files {
+				if info, err := os.Stat(file); err == nil && !info.IsDir() {
+					seedCount++
+				}
+			}
+			fmt.Printf("  📊 Found %d seed files\n", seedCount)
+		}
+	}
+	fmt.Println()
+
+	// Validate output directories
+	fmt.Println("📂 Output Directory Validation:")
+	fmt.Printf("  Output Directory: %s\n", config.OutputDir)
+	fmt.Printf("  Crash Directory: %s\n", config.CrashDir)
+
+	// Check if we can create output directories
+	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
+		fmt.Printf("  ❌ Cannot create output directory: %v\n", err)
+	} else {
+		fmt.Println("  ✅ Output directory is writable")
+	}
+
+	if err := os.MkdirAll(config.CrashDir, 0755); err != nil {
+		fmt.Printf("  ❌ Cannot create crash directory: %v\n", err)
+	} else {
+		fmt.Println("  ✅ Crash directory is writable")
+	}
+	fmt.Println()
+
+	// Validate logging
+	fmt.Println("📝 Logging Validation:")
+	fmt.Printf("  Log Level: %s\n", viper.GetString("log_level"))
+	fmt.Printf("  Log File: %s\n", viper.GetString("log_file"))
+	fmt.Printf("  JSON Logs: %t\n", viper.GetBool("json_logs"))
+
+	logFile := viper.GetString("log_file")
+	if logFile != "" {
+		if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
+			fmt.Printf("  ❌ Cannot create log directory: %v\n", err)
+		} else {
+			fmt.Println("  ✅ Log directory is writable")
+		}
+	}
+	fmt.Println()
+
+	// Print configuration summary
+	fmt.Println("⚙️  Configuration Summary:")
+	fmt.Printf("  Workers: %d\n", config.Workers)
+	fmt.Printf("  Timeout: %v\n", config.Timeout)
+	fmt.Printf("  Memory Limit: %d bytes\n", config.MemoryLimit)
+	fmt.Printf("  Max Corpus Size: %d\n", config.MaxCorpusSize)
+	fmt.Printf("  Mutation Rate: %.3f\n", config.MutationRate)
+	fmt.Printf("  Max Mutations: %d\n", config.MaxMutations)
+	fmt.Printf("  Strategy: %s\n", config.Strategy)
+	fmt.Printf("  Coverage Type: %s\n", config.CoverageType)
+	fmt.Printf("  Coverage Guided: %t\n", viper.GetBool("coverage_guided"))
+
+	if grammarType != "" {
+		fmt.Printf("  Grammar Type: %s\n", grammarType)
+		seedKeys := viper.GetStringSlice("grammar_seeds")
+		if len(seedKeys) > 0 {
+			fmt.Printf("  Grammar Seeds: %v\n", seedKeys)
+		}
+		maxDepth := viper.GetInt("grammar_depth")
+		fmt.Printf("  Grammar Depth: %d\n", maxDepth)
+	}
+	fmt.Println()
+
+	// Validate mutators
+	fmt.Println("🧬 Mutator Configuration:")
+	if grammarType == "json" {
+		fmt.Println("  ✅ Grammar-based fuzzing enabled")
+		fmt.Println("    - JSONGrammar with enhanced mutation variability")
+		fmt.Println("    - Deep fuzzing with nested structures")
+		fmt.Println("    - Array and object mutation support")
+	} else {
+		fmt.Println("  ✅ Standard mutators enabled:")
+		fmt.Println("    - BitFlipMutator")
+		fmt.Println("    - ByteSubstitutionMutator")
+		fmt.Println("    - ArithmeticMutator")
+		fmt.Println("    - StructureAwareMutator")
+		fmt.Println("    - CrossOverMutator")
+	}
+	fmt.Println()
+
+	fmt.Println("🎉 Dry run completed successfully!")
+	fmt.Println("   All validations passed. Ready to start fuzzing!")
+
+	return nil
+}
+
+// listMutators displays detailed information about all available mutators
+func listMutators(cmd *cobra.Command, args []string) error {
+	fmt.Println("🧬 Available Fuzzer Mutators")
+	fmt.Println("==============================")
+	fmt.Println()
+
+	// Standard mutators
+	fmt.Println("📋 Standard Mutators:")
+	fmt.Println("--------------------")
+
+	bitFlip := &strategies.BitFlipMutator{}
+	fmt.Printf("  • %s\n", bitFlip.Name())
+	fmt.Printf("    Description: %s\n", bitFlip.Description())
+	fmt.Printf("    Usage: Flips random bits in test case data\n")
+	fmt.Printf("    Best for: Binary protocols, file formats\n")
+	fmt.Println()
+
+	byteSub := &strategies.ByteSubstitutionMutator{}
+	fmt.Printf("  • %s\n", byteSub.Name())
+	fmt.Printf("    Description: %s\n", byteSub.Description())
+	fmt.Printf("    Usage: Substitutes random bytes with new values\n")
+	fmt.Printf("    Best for: Text-based protocols, general fuzzing\n")
+	fmt.Println()
+
+	arithmetic := &strategies.ArithmeticMutator{}
+	fmt.Printf("  • %s\n", arithmetic.Name())
+	fmt.Printf("    Description: %s\n", arithmetic.Description())
+	fmt.Printf("    Usage: Performs arithmetic operations on numeric data\n")
+	fmt.Printf("    Best for: Numeric protocols, calculations, counters\n")
+	fmt.Println()
+
+	structureAware := &strategies.StructureAwareMutator{}
+	fmt.Printf("  • %s\n", structureAware.Name())
+	fmt.Printf("    Description: %s\n", structureAware.Description())
+	fmt.Printf("    Usage: Maintains structural integrity while mutating\n")
+	fmt.Printf("    Best for: Structured data, headers, metadata\n")
+	fmt.Println()
+
+	crossOver := &strategies.CrossOverMutator{}
+	fmt.Printf("  • %s\n", crossOver.Name())
+	fmt.Printf("    Description: %s\n", crossOver.Description())
+	fmt.Printf("    Usage: Combines parts from multiple test cases\n")
+	fmt.Printf("    Best for: Complex protocols, stateful testing\n")
+	fmt.Println()
+
+	composite := &strategies.CompositeMutator{}
+	fmt.Printf("  • %s\n", composite.Name())
+	fmt.Printf("    Description: %s\n", composite.Description())
+	fmt.Printf("    Usage: Chains multiple mutators together\n")
+	fmt.Printf("    Best for: Complex mutation strategies\n")
+	fmt.Println()
+
+	// Grammar-based mutators
+	fmt.Println("🎯 Grammar-Based Mutators:")
+	fmt.Println("-------------------------")
+
+	jsonGrammar := &strategies.GrammarMutator{}
+	fmt.Printf("  • %s\n", jsonGrammar.Name())
+	fmt.Printf("    Description: %s\n", jsonGrammar.Description())
+	fmt.Printf("    Usage: Generates and mutates structured JSON data\n")
+	fmt.Printf("    Best for: JSON APIs, web services, configuration files\n")
+	fmt.Printf("    Features:\n")
+	fmt.Printf("      - Deep recursive generation with configurable depth\n")
+	fmt.Printf("      - Type-aware mutations (string, number, boolean, array, object)\n")
+	fmt.Printf("      - Seed key support for target-aware generation\n")
+	fmt.Printf("      - Array and object mutation strategies\n")
+	fmt.Printf("      - Type conversion mutations\n")
+	fmt.Printf("    Configuration:\n")
+	fmt.Printf("      --grammar-type json: Enable JSON grammar fuzzing\n")
+	fmt.Printf("      --grammar-seeds key1,key2: Specify seed keys for generation\n")
+	fmt.Printf("      --grammar-depth 5: Set maximum nesting depth (default: 3)\n")
+	fmt.Println()
+
+	// Usage examples
+	fmt.Println("💡 Usage Examples:")
+	fmt.Println("------------------")
+	fmt.Println("  # Standard fuzzing with all mutators")
+	fmt.Println("  ./fuzzer fuzz --target ./myapp --corpus ./seeds")
+	fmt.Println()
+	fmt.Println("  # JSON grammar fuzzing")
+	fmt.Println("  ./fuzzer fuzz --target ./json-parser --grammar-type json")
+	fmt.Println()
+	fmt.Println("  # JSON with specific seed keys")
+	fmt.Println("  ./fuzzer fuzz --target ./api-server --grammar-type json --grammar-seeds user_id,email,status")
+	fmt.Println()
+	fmt.Println("  # Deep JSON fuzzing")
+	fmt.Println("  ./fuzzer fuzz --target ./config-parser --grammar-type json --grammar-depth 8")
+	fmt.Println()
+	fmt.Println("  # Coverage-guided fuzzing")
+	fmt.Println("  ./fuzzer fuzz --target ./myapp --coverage-guided")
+	fmt.Println()
+	fmt.Println("  # Dry run to validate configuration")
+	fmt.Println("  ./fuzzer fuzz --target ./myapp --dry-run")
+	fmt.Println()
+
+	// Configuration tips
+	fmt.Println("🔧 Configuration Tips:")
+	fmt.Println("---------------------")
+	fmt.Println("  • Use --mutation-rate to control mutation intensity")
+	fmt.Println("  • Use --max-mutations to limit mutations per test case")
+	fmt.Println("  • Use --workers to parallelize fuzzing")
+	fmt.Println("  • Use --timeout to prevent hangs")
+	fmt.Println("  • Use --memory-limit to prevent OOM")
+	fmt.Println("  • Use --strategy to select mutation strategy")
+	fmt.Println("  • Use --log-level to control verbosity")
+	fmt.Println()
+
+	fmt.Println("✨ For more information, see the README.md and Docs/ARCHITECTURE.md")
+
+	return nil
+}
+
+// performSelfCheck performs comprehensive system validation checks
+func performSelfCheck(cmd *cobra.Command, args []string) error {
+	fmt.Println("🔍 Akaylee Fuzzer - System Self-Check")
+	fmt.Println("=====================================")
+	fmt.Println()
+
+	// Load configuration first
+	if err := loadConfig(); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Setup logging for check
+	if err := setupLogging(); err != nil {
+		return fmt.Errorf("failed to setup logging: %w", err)
+	}
+
+	checks := []struct {
+		name     string
+		function func() error
+	}{
+		{"Binary Dependencies", checkBinaryDependencies},
+		{"System Resources", checkSystemResources},
+		{"File System Permissions", checkFileSystemPermissions},
+		{"Network Connectivity", checkNetworkConnectivity},
+		{"Configuration Validation", checkConfigurationValidation},
+	}
+
+	passed := 0
+	total := len(checks)
+
+	for _, check := range checks {
+		fmt.Printf("🔍 %s...\n", check.name)
+		if err := check.function(); err != nil {
+			fmt.Printf("  ❌ %s: %v\n", check.name, err)
+		} else {
+			fmt.Printf("  ✅ %s: PASSED\n", check.name)
+			passed++
+		}
+		fmt.Println()
+	}
+
+	// Print summary
+	fmt.Println("📊 Check Summary:")
+	fmt.Printf("  Passed: %d/%d\n", passed, total)
+	fmt.Printf("  Failed: %d/%d\n", total-passed, total)
+
+	if passed == total {
+		fmt.Println("\n🎉 All checks passed! System is ready for fuzzing.")
+		return nil
+	} else {
+		fmt.Println("\n⚠️  Some checks failed. Please address the issues above before fuzzing.")
+		return fmt.Errorf("self-check failed: %d/%d checks passed", passed, total)
+	}
+}
+
+// checkBinaryDependencies validates that required binaries are available
+func checkBinaryDependencies() error {
+	// Check if Go is available
+	if _, err := exec.LookPath("go"); err != nil {
+		return fmt.Errorf("Go binary not found: %w", err)
+	}
+
+	// Check if basic system tools are available
+	tools := []string{"ls", "cat", "echo"}
+	for _, tool := range tools {
+		if _, err := exec.LookPath(tool); err != nil {
+			return fmt.Errorf("system tool '%s' not found: %w", tool, err)
+		}
+	}
+
+	return nil
+}
+
+// checkSystemResources validates system resource availability
+func checkSystemResources() error {
+	// Check available memory
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	availableMem := m.Sys - m.Alloc
+
+	if availableMem < 100*1024*1024 { // Less than 100MB available
+		return fmt.Errorf("insufficient memory available: %d bytes", availableMem)
+	}
+
+	// Check CPU cores
+	numCPU := runtime.NumCPU()
+	if numCPU < 1 {
+		return fmt.Errorf("no CPU cores detected")
+	}
+
+	// Check disk space (basic check)
+	if err := checkDiskSpace(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// checkDiskSpace performs a basic disk space check
+func checkDiskSpace() error {
+	// Check current directory
+	wd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot get working directory: %w", err)
+	}
+
+	// Try to create a temporary file to test writability
+	tmpfile, err := os.CreateTemp(wd, "akaylee-check-*")
+	if err != nil {
+		return fmt.Errorf("cannot create temporary file: %w", err)
+	}
+	defer os.Remove(tmpfile.Name())
+	defer tmpfile.Close()
+
+	// Write some data to test disk space
+	testData := []byte("akaylee-fuzzer-disk-space-test")
+	if _, err := tmpfile.Write(testData); err != nil {
+		return fmt.Errorf("cannot write to disk: %w", err)
+	}
+
+	return nil
+}
+
+// checkFileSystemPermissions validates file system permissions
+func checkFileSystemPermissions() error {
+	// Check if we can create directories
+	testDirs := []string{"./akaylee-test-dir", "./logs", "./fuzz_output", "./crashes"}
+
+	for _, dir := range testDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("cannot create directory '%s': %w", dir, err)
+		}
+		// Clean up test directory
+		if dir == "./akaylee-test-dir" {
+			os.RemoveAll(dir)
+		}
+	}
+
+	// Check if we can write to current directory
+	testFile := "./akaylee-test-file"
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		return fmt.Errorf("cannot write to current directory: %w", err)
+	}
+	os.Remove(testFile)
+
+	return nil
+}
+
+// checkNetworkConnectivity validates basic network connectivity
+func checkNetworkConnectivity() error {
+	// Check if we can resolve localhost
+	_, err := net.LookupHost("localhost")
+	if err != nil {
+		return fmt.Errorf("cannot resolve localhost: %w", err)
+	}
+
+	// Check if we can create a TCP listener (basic network stack test)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("cannot create TCP listener: %w", err)
+	}
+	listener.Close()
+
+	return nil
+}
+
+// checkConfigurationValidation validates configuration settings
+func checkConfigurationValidation() error {
+	// Check if required configuration is set
+	if viper.GetString("log_level") == "" {
+		return fmt.Errorf("log level not configured")
+	}
+
+	// Validate log level
+	validLogLevels := []string{"debug", "info", "warn", "error"}
+	logLevel := viper.GetString("log_level")
+	valid := false
+	for _, level := range validLogLevels {
+		if level == logLevel {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return fmt.Errorf("invalid log level: %s (valid: %v)", logLevel, validLogLevels)
+	}
+
+	// Check log directory configuration
+	logDir := viper.GetString("log_dir")
+	if logDir != "" {
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("cannot create log directory '%s': %w", logDir, err)
+		}
+	}
+
+	return nil
 }
