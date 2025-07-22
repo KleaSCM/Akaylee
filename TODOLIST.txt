@@ -20,3 +20,86 @@ Akaylee Fuzzer TODO
 [ ] Advanced resource monitoring (CPU/mem per test)
 [ ] Seed corpus auto-expansion (from real-world data)
 [ ] Fuzzing for non-binary targets (APIs, network, etc.)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+flowchart TD
+    subgraph Fuzzer_Engine
+        A[Scheduler] -->|Next/Push| B[Worker]
+        B -->|Execute| C[Executor]
+        B -->|Analyze| D[Analyzer]
+        B -->|Mutate| E[Mutator/CompositeMutator]
+        B -->|Report| F[Reporter]
+        F -->|Log| G[Logger]
+        F -->|Prometheus| H[PrometheusExporter]
+        F -->|TUI| I[TUI Dashboard]
+        C -->|Resource| J[ResourceMonitor]
+        D -->|Coverage| K[CoverageCollector]
+        D -->|CrashMatch| L[CrashMatcher]
+        E -->|Chain| M[BitFlip/Arithmetic/Structure/CrossOver]
+    end
+    G -->|Syslog/Journald| N[Enterprise Log Sinks]
+    G -->|Async| O[Log Queue]
+    K -->|Coverage Data| P[Corpus]
+    B -->|Corpus Ops| P
+    P -->|TestCase| B
+    style F fill:#f9e,stroke:#333,stroke-width:2px
+    style G fill:#f9e,stroke:#333,stroke-width:2px
+    style H fill:#f9e,stroke:#333,stroke-width:2px
+    style I fill:#f9e,stroke:#333,stroke-width:2px
+    style N fill:#f9e,stroke:#333,stroke-width:2px
+    style O fill:#f9e,stroke:#333,stroke-width:2px
+    style L fill:#f9e,stroke:#333,stroke-width:2px
+    style M fill:#f9e,stroke:#333,stroke-width:2px
+    style J fill:#f9e,stroke:#333,stroke-width:2px
+    style K fill:#f9e,stroke:#333,stroke-width:2px
+    style P fill:#f9e,stroke:#333,stroke-width:2px
+    style A fill:#f9e,stroke:#333,stroke-width:2px
+    style B fill:#f9e,stroke:#333,stroke-width:2px
+    style C fill:#f9e,stroke:#333,stroke-width:2px
+    style D fill:#f9e,stroke:#333,stroke-width:2px
+    style E fill:#f9e,stroke:#333,stroke-width:2px

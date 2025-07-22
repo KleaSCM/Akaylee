@@ -71,6 +71,7 @@ type CrashInfo struct {
 	MemoryMap    []MemoryRegion
 	Reproducible bool
 	Hash         string
+	Metadata     map[string]interface{} // Extensible metadata for crash analysis
 }
 
 // HangInfo represents information about a hang

@@ -14,16 +14,54 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
+	"regexp"
 	"time"
 
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 )
 
+// CrashMatcher defines the interface for matching interesting crashes.
+// Allows regex or ruleset-based detection of likely OOB or exploitable crashes.
+type CrashMatcher interface {
+	IsInterestingCrash(crash *interfaces.CrashInfo, result *interfaces.ExecutionResult) bool
+}
+
+// RegexCrashMatcher implements CrashMatcher using regex patterns.
+type RegexCrashMatcher struct {
+	patterns []*regexp.Regexp
+}
+
+// NewRegexCrashMatcher creates a new RegexCrashMatcher with given patterns.
+func NewRegexCrashMatcher(patterns []string) *RegexCrashMatcher {
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pat := range patterns {
+		if re, err := regexp.Compile(pat); err == nil {
+			compiled = append(compiled, re)
+		}
+	}
+	return &RegexCrashMatcher{patterns: compiled}
+}
+
+// IsInterestingCrash returns true if any pattern matches the crash info or output.
+func (m *RegexCrashMatcher) IsInterestingCrash(crash *interfaces.CrashInfo, result *interfaces.ExecutionResult) bool {
+	if crash == nil || result == nil {
+		return false
+	}
+	for _, re := range m.patterns {
+		if re.MatchString(crash.Type) || re.MatchString(string(result.Output)) || re.MatchString(string(result.Error)) {
+			return true
+		}
+	}
+	return false
+}
+
 // CoverageAnalyzer implements the Analyzer interface
 // Provides coverage tracking and result analysis capabilities
+// Now supports crash matching
 type CoverageAnalyzer struct {
 	globalCoverage map[uint64]bool // Global coverage bitmap
 	edgeThreshold  int             // Minimum edges for interesting test case
+	crashMatcher   CrashMatcher    // Optional crash matcher
 }
 
 // NewCoverageAnalyzer creates a new coverage analyzer instance
@@ -32,6 +70,11 @@ func NewCoverageAnalyzer() *CoverageAnalyzer {
 		globalCoverage: make(map[uint64]bool),
 		edgeThreshold:  10, // Default threshold
 	}
+}
+
+// SetCrashMatcher sets the crash matcher for the analyzer.
+func (a *CoverageAnalyzer) SetCrashMatcher(matcher CrashMatcher) {
+	a.crashMatcher = matcher
 }
 
 // Analyze analyzes an execution result
@@ -107,35 +150,33 @@ func (a *CoverageAnalyzer) GetCoverage(result *interfaces.ExecutionResult) (*int
 
 // DetectCrash detects if an execution resulted in a crash
 // Analyzes exit codes, signals, and output for crash indicators
+// Now uses crash matcher if set
 func (a *CoverageAnalyzer) DetectCrash(result *interfaces.ExecutionResult) (*interfaces.CrashInfo, error) {
-	// Check for crash signals
+	var crashInfo *interfaces.CrashInfo
 	if result.Signal != 0 {
-		crashInfo := &interfaces.CrashInfo{
+		crashInfo = &interfaces.CrashInfo{
 			Type:         a.getSignalName(result.Signal),
 			Address:      0, // Would be extracted from crash analysis
 			Reproducible: true,
 			Hash:         a.calculateCrashHash(result),
+			StackTrace:   a.extractStackTrace(result),
 		}
-
-		// Extract stack trace (simplified)
-		crashInfo.StackTrace = a.extractStackTrace(result)
-
-		return crashInfo, nil
-	}
-
-	// Check for abnormal exit codes
-	if result.ExitCode != 0 && result.ExitCode != 1 {
-		// This might indicate a crash
-		crashInfo := &interfaces.CrashInfo{
+	} else if result.ExitCode != 0 && result.ExitCode != 1 {
+		crashInfo = &interfaces.CrashInfo{
 			Type:         "ABNORMAL_EXIT",
 			Address:      0,
 			Reproducible: true,
 			Hash:         a.calculateCrashHash(result),
 		}
-
+	}
+	if crashInfo != nil && a.crashMatcher != nil {
+		if a.crashMatcher.IsInterestingCrash(crashInfo, result) {
+			crashInfo.Metadata = map[string]interface{}{"interesting": true}
+		}
+	}
+	if crashInfo != nil {
 		return crashInfo, nil
 	}
-
 	return nil, nil
 }
 
