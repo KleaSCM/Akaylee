@@ -19,23 +19,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
-	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
-	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/sirupsen/logrus"
 )
 
 // Engine implements the FuzzerEngine interface
 // Provides the main fuzzing logic with advanced scheduling and optimization
 type Engine struct {
-	config *FuzzerConfig
+	config *interfaces.FuzzerConfig
 	stats  *FuzzerStats
 	logger *logrus.Logger
 
 	// Core components
-	executor Executor
-	analyzer Analyzer
-	mutators []Mutator
+	executor interfaces.Executor
+	analyzer interfaces.Analyzer
+	mutators []interfaces.Mutator
 
 	// Corpus management
 	corpus *Corpus
@@ -74,7 +72,7 @@ func NewEngine() *Engine {
 
 // Initialize sets up the fuzzer engine with the given configuration
 // Prepares all components for execution including executor, analyzer, and mutators
-func (e *Engine) Initialize(config *FuzzerConfig) error {
+func (e *Engine) Initialize(config *interfaces.FuzzerConfig) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -84,17 +82,20 @@ func (e *Engine) Initialize(config *FuzzerConfig) error {
 	// Configure logging
 	e.setupLogging()
 
-	// Initialize executor
-	e.executor = execution.NewProcessExecutor()
-	if err := e.executor.Initialize(config); err != nil {
-		return fmt.Errorf("failed to initialize executor: %w", err)
+	// Initialize executor (will be set by dependency injection)
+	if e.executor == nil {
+		return fmt.Errorf("executor not set - use SetExecutor() before Initialize()")
 	}
 
-	// Initialize analyzer
-	e.analyzer = analysis.NewCoverageAnalyzer()
+	// Initialize analyzer (will be set by dependency injection)
+	if e.analyzer == nil {
+		return fmt.Errorf("analyzer not set - use SetAnalyzer() before Initialize()")
+	}
 
-	// Initialize mutators
-	e.initializeMutators()
+	// Initialize mutators (will be set by dependency injection)
+	if len(e.mutators) == 0 {
+		return fmt.Errorf("mutators not set - use SetMutators() before Initialize()")
+	}
 
 	// Initialize corpus
 	if err := e.initializeCorpus(); err != nil {
@@ -106,6 +107,21 @@ func (e *Engine) Initialize(config *FuzzerConfig) error {
 
 	e.logger.Info("Fuzzer engine initialized successfully")
 	return nil
+}
+
+// SetExecutor sets the executor for the engine
+func (e *Engine) SetExecutor(executor interfaces.Executor) {
+	e.executor = executor
+}
+
+// SetAnalyzer sets the analyzer for the engine
+func (e *Engine) SetAnalyzer(analyzer interfaces.Analyzer) {
+	e.analyzer = analyzer
+}
+
+// SetMutators sets the mutators for the engine
+func (e *Engine) SetMutators(mutators []interfaces.Mutator) {
+	e.mutators = mutators
 }
 
 // setupLogging configures the logging system based on configuration
@@ -126,20 +142,6 @@ func (e *Engine) setupLogging() {
 	if e.config.JSONLogs {
 		e.logger.SetFormatter(&logrus.JSONFormatter{})
 	}
-}
-
-// initializeMutators sets up the available mutation strategies
-// Creates a diverse set of mutators for different types of input manipulation
-func (e *Engine) initializeMutators() {
-	e.mutators = []Mutator{
-		strategies.NewBitFlipMutator(e.config.MutationRate),
-		strategies.NewByteSubstitutionMutator(e.config.MutationRate),
-		strategies.NewArithmeticMutator(e.config.MutationRate),
-		strategies.NewStructureAwareMutator(e.config.MutationRate),
-		strategies.NewCrossOverMutator(e.config.MutationRate),
-	}
-
-	e.logger.Infof("Initialized %d mutators", len(e.mutators))
 }
 
 // initializeCorpus loads the initial seed corpus from the configured directory
@@ -367,7 +369,7 @@ func (e *Engine) generateTestCases() {
 
 // selectMutator chooses the best mutator for a given test case
 // Implements adaptive mutation strategy selection
-func (e *Engine) selectMutator(testCase *TestCase) Mutator {
+func (e *Engine) selectMutator(testCase *TestCase) interfaces.Mutator {
 	// Simple strategy: rotate through mutators
 	index := testCase.Executions % int64(len(e.mutators))
 	return e.mutators[index]

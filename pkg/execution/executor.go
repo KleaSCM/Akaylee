@@ -16,13 +16,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 )
 
 // ProcessExecutor implements the Executor interface
 // Handles the execution of target programs with comprehensive monitoring
 type ProcessExecutor struct {
-	config *core.FuzzerConfig
+	config *interfaces.FuzzerConfig
 }
 
 // NewProcessExecutor creates a new process executor instance
@@ -31,18 +31,18 @@ func NewProcessExecutor() *ProcessExecutor {
 }
 
 // Initialize sets up the executor with the given configuration
-func (e *ProcessExecutor) Initialize(config *core.FuzzerConfig) error {
+func (e *ProcessExecutor) Initialize(config *interfaces.FuzzerConfig) error {
 	e.config = config
 	return nil
 }
 
 // Execute runs a test case and returns the execution result
 // Handles process creation, monitoring, and result collection
-func (e *ProcessExecutor) Execute(testCase *core.TestCase) (*core.ExecutionResult, error) {
+func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.ExecutionResult, error) {
 	// Create execution result
-	result := &core.ExecutionResult{
+	result := &interfaces.ExecutionResult{
 		TestCaseID: testCase.ID,
-		Status:     core.StatusSuccess,
+		Status:     interfaces.StatusSuccess,
 	}
 
 	// Create command
@@ -65,7 +65,7 @@ func (e *ProcessExecutor) Execute(testCase *core.TestCase) (*core.ExecutionResul
 	// Start the process
 	startTime := time.Now()
 	if err := cmd.Start(); err != nil {
-		result.Status = core.StatusError
+		result.Status = interfaces.StatusError
 		result.Error = []byte(err.Error())
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("failed to start process: %w", err)
@@ -74,7 +74,7 @@ func (e *ProcessExecutor) Execute(testCase *core.TestCase) (*core.ExecutionResul
 	// Write test case data to stdin
 	if _, err := stdin.Write(testCase.Data); err != nil {
 		cmd.Process.Kill()
-		result.Status = core.StatusError
+		result.Status = interfaces.StatusError
 		result.Error = []byte(err.Error())
 		result.Duration = time.Since(startTime)
 		return result, fmt.Errorf("failed to write to stdin: %w", err)
@@ -98,44 +98,36 @@ func (e *ProcessExecutor) Execute(testCase *core.TestCase) (*core.ExecutionResul
 			if waitStatus, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok {
 				if waitStatus.Signaled() {
 					result.Signal = int(waitStatus.Signal())
-					result.Status = core.StatusCrash
+					result.Status = interfaces.StatusCrash
 				}
 			}
 		}
 
 		if err != nil {
-			result.Status = core.StatusError
+			result.Status = interfaces.StatusError
 			result.Error = []byte(err.Error())
 		}
 
 	case <-time.After(e.config.Timeout):
-		// Process timed out
 		cmd.Process.Kill()
-		result.Status = core.StatusTimeout
+		result.Status = interfaces.StatusTimeout
 		result.Duration = e.config.Timeout
 	}
 
 	return result, nil
 }
 
-// setResourceLimits configures resource limits for the process
-// Prevents excessive resource consumption during execution
+// setResourceLimits applies resource limits to the process
+// Prevents excessive resource usage during fuzzing
 func (e *ProcessExecutor) setResourceLimits(cmd *exec.Cmd) {
-	// Set memory limit if configured
+	// Set memory limit if specified
 	if e.config.MemoryLimit > 0 {
 		// This is a simplified implementation
-		// In production, would use rlimit or cgroups
-	}
-
-	// Set CPU affinity if configured
-	if len(e.config.CPUAffinity) > 0 {
-		// This is a simplified implementation
-		// In production, would use sched_setaffinity
+		// In a full implementation, you would use rlimit or cgroups
 	}
 }
 
 // Cleanup performs any necessary cleanup operations
 func (e *ProcessExecutor) Cleanup() error {
-	// No cleanup needed for process executor
 	return nil
 }
