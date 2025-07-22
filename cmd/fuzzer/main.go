@@ -20,6 +20,7 @@ import (
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
 	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
+	"github.com/kleascm/akaylee-fuzzer/pkg/grammar"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
@@ -76,7 +77,8 @@ var (
 	logMaxSize  int64
 	logCompress bool
 
-	coverageGuided bool // New flag for coverage-guided fuzzing
+	coverageGuided bool   // New flag for coverage-guided fuzzing
+	grammarType    string // New: grammar type for grammar-based fuzzing
 )
 
 // Global logger instance
@@ -154,6 +156,10 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	fuzzCmd.Flags().BoolVar(&profileMemory, "profile-memory", false, "Enable memory profiling")
 	fuzzCmd.Flags().BoolVar(&coverageGuided, "coverage-guided", false, "Enable coverage-guided fuzzing (Go targets)")
 
+	// Add grammar flag
+	fuzzCmd.Flags().StringVar(&grammarType, "grammar", "", "Enable grammar-based fuzzing (e.g., 'json')")
+	viper.BindPFlag("grammar_type", fuzzCmd.Flags().Lookup("grammar"))
+
 	// Mark required flags
 	fuzzCmd.MarkFlagRequired("target")
 	fuzzCmd.MarkFlagRequired("corpus")
@@ -181,6 +187,7 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	viper.BindPFlag("profile_cpu", fuzzCmd.Flags().Lookup("profile-cpu"))
 	viper.BindPFlag("profile_memory", fuzzCmd.Flags().Lookup("profile-memory"))
 	viper.BindPFlag("coverage_guided", fuzzCmd.Flags().Lookup("coverage-guided"))
+	viper.BindPFlag("grammar_type", fuzzCmd.Flags().Lookup("grammar"))
 
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
@@ -215,12 +222,20 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 	executor := execution.NewProcessExecutor()
 	executor.Initialize(config) // Ensure config is set for the executor
 	analyzer := analysis.NewCoverageAnalyzer()
-	mutators := []interfaces.Mutator{
-		strategies.NewBitFlipMutator(config.MutationRate),
-		strategies.NewByteSubstitutionMutator(config.MutationRate),
-		strategies.NewArithmeticMutator(config.MutationRate),
-		strategies.NewStructureAwareMutator(config.MutationRate),
-		strategies.NewCrossOverMutator(config.MutationRate),
+
+	var mutators []interfaces.Mutator
+	if grammarType == "json" {
+		mutators = []interfaces.Mutator{
+			strategies.NewGrammarMutator(grammar.NewJSONGrammar()),
+		}
+	} else {
+		mutators = []interfaces.Mutator{
+			strategies.NewBitFlipMutator(config.MutationRate),
+			strategies.NewByteSubstitutionMutator(config.MutationRate),
+			strategies.NewArithmeticMutator(config.MutationRate),
+			strategies.NewStructureAwareMutator(config.MutationRate),
+			strategies.NewCrossOverMutator(config.MutationRate),
+		}
 	}
 
 	engine.SetExecutor(executor)
