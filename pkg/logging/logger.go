@@ -18,6 +18,8 @@ import (
 	"sort"
 	"time"
 
+	"log/syslog"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -42,6 +44,7 @@ const (
 )
 
 // LoggerConfig holds the configuration for the logger
+// Now includes syslog and journald options
 type LoggerConfig struct {
 	Level     LogLevel  `json:"level"`
 	Format    LogFormat `json:"format"`
@@ -52,6 +55,12 @@ type LoggerConfig struct {
 	Caller    bool      `json:"caller"`
 	Colors    bool      `json:"colors"`
 	Compress  bool      `json:"compress"`
+
+	SyslogEnabled   bool   `json:"syslog_enabled"`
+	SyslogNetwork   string `json:"syslog_network"`
+	SyslogAddress   string `json:"syslog_address"`
+	JournaldEnabled bool   `json:"journald_enabled"`
+	// GRPCSinkEnabled bool   `json:"grpc_sink_enabled"` // Stub for now
 }
 
 // Validate checks the LoggerConfig for invalid or missing values.
@@ -153,6 +162,21 @@ func (l *Logger) setup() error {
 
 	// Setup console output
 	l.setupConsoleOutput()
+
+	// Setup syslog sink if enabled
+	if l.config.SyslogEnabled {
+		writer, err := syslog.Dial(l.config.SyslogNetwork, l.config.SyslogAddress, syslog.LOG_INFO|syslog.LOG_USER, "akaylee-fuzzer")
+		if err != nil {
+			return fmt.Errorf("failed to connect to syslog: %w", err)
+		}
+		l.logger.SetOutput(io.MultiWriter(l.logger.Out, writer))
+	}
+	// Setup journald sink if enabled (stub)
+	if l.config.JournaldEnabled {
+		// TODO: Integrate with go-systemd/journal for journald support
+		// For now, just log a warning
+		l.logger.Warn("Journald logging enabled, but not implemented yet.")
+	}
 
 	return nil
 }
