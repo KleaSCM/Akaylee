@@ -7,7 +7,7 @@ byte substitution, arithmetic mutations, structure-aware mutations, and crossove
 operations with proper validation and edge case handling.
 */
 
-package Tests
+package core_test
 
 import (
 	"bytes"

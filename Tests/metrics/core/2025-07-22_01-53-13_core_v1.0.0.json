@@ -1,0 +1,17 @@
+{
+  "duration_seconds": 0.001980694,
+  "end_time": "2025-07-22T01:53:13Z",
+  "failed": 1,
+  "passed": 0,
+  "start_time": "2025-07-22T01:53:13Z",
+  "tests": [
+    {
+      "name": "TestEngineInitialization",
+      "passed": false,
+      "duration_ms": 0.036
+    }
+  ],
+  "timestamp": "2025-07-22 01:53:13",
+  "total_tests": 1,
+  "version": "1.0.0"
+}

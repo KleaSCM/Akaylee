@@ -6,7 +6,7 @@ Description: Comprehensive tests for the logging system. Tests logger creation,
 formatting, file output, rotation, and analysis capabilities.
 */
 
-package Tests
+package core_test
 
 import (
 	"os"
