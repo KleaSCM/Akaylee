@@ -11,10 +11,12 @@ package core_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kleascm/akaylee-fuzzer/pkg/grammar"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 	"github.com/stretchr/testify/assert"
@@ -380,4 +382,33 @@ func TestMutationMetadata(t *testing.T) {
 			assert.Equal(t, 0.5, mutated.Metadata["mutation_rate"])
 		})
 	}
+}
+
+func TestGrammarMutator_JSON(t *testing.T) {
+	mutator := strategies.NewGrammarMutator(grammar.NewJSONGrammar())
+
+	// Generate a valid JSON input
+	input, err := grammar.NewJSONGrammar().Generate()
+	require.NoError(t, err)
+	assert.NotEmpty(t, input)
+
+	testCase := &interfaces.TestCase{
+		ID:         "json1",
+		Data:       input,
+		Generation: 0,
+		CreatedAt:  time.Now(),
+		Priority:   100,
+	}
+
+	mutated, err := mutator.Mutate(testCase)
+	require.NoError(t, err)
+	assert.NotNil(t, mutated)
+	assert.NotEqual(t, string(testCase.Data), string(mutated.Data))
+	assert.Equal(t, "GrammarMutator", mutated.Metadata["mutator"])
+	assert.Equal(t, "JSONGrammar", mutated.Metadata["grammar"])
+
+	// Check that mutated data is still valid JSON
+	var obj map[string]interface{}
+	err = json.Unmarshal(mutated.Data, &obj)
+	assert.NoError(t, err)
 }
