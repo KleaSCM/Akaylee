@@ -16,7 +16,7 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 )
 
 // CoverageAnalyzer implements the Analyzer interface
@@ -36,7 +36,7 @@ func NewCoverageAnalyzer() *CoverageAnalyzer {
 
 // Analyze analyzes an execution result
 // Extracts coverage information and updates global coverage tracking
-func (a *CoverageAnalyzer) Analyze(result *core.ExecutionResult) error {
+func (a *CoverageAnalyzer) Analyze(result *interfaces.ExecutionResult) error {
 	// Extract coverage information
 	coverage, err := a.GetCoverage(result)
 	if err != nil {
@@ -53,7 +53,7 @@ func (a *CoverageAnalyzer) Analyze(result *core.ExecutionResult) error {
 
 // IsInteresting determines if a test case is interesting based on coverage
 // Returns true if the test case provides new coverage or meets other criteria
-func (a *CoverageAnalyzer) IsInteresting(testCase *core.TestCase) bool {
+func (a *CoverageAnalyzer) IsInteresting(testCase *interfaces.TestCase) bool {
 	if testCase.Coverage == nil {
 		return false
 	}
@@ -82,11 +82,11 @@ func (a *CoverageAnalyzer) IsInteresting(testCase *core.TestCase) bool {
 
 // GetCoverage extracts coverage information from execution
 // Creates a coverage object with bitmap and statistics
-func (a *CoverageAnalyzer) GetCoverage(result *core.ExecutionResult) (*core.Coverage, error) {
+func (a *CoverageAnalyzer) GetCoverage(result *interfaces.ExecutionResult) (*interfaces.Coverage, error) {
 	// This is a simplified implementation
 	// In production, would extract coverage from instrumentation or tracing
 
-	coverage := &core.Coverage{
+	coverage := &interfaces.Coverage{
 		Timestamp: time.Now(),
 	}
 
@@ -107,10 +107,10 @@ func (a *CoverageAnalyzer) GetCoverage(result *core.ExecutionResult) (*core.Cove
 
 // DetectCrash detects if an execution resulted in a crash
 // Analyzes exit codes, signals, and output for crash indicators
-func (a *CoverageAnalyzer) DetectCrash(result *core.ExecutionResult) (*core.CrashInfo, error) {
+func (a *CoverageAnalyzer) DetectCrash(result *interfaces.ExecutionResult) (*interfaces.CrashInfo, error) {
 	// Check for crash signals
 	if result.Signal != 0 {
-		crashInfo := &core.CrashInfo{
+		crashInfo := &interfaces.CrashInfo{
 			Type:         a.getSignalName(result.Signal),
 			Address:      0, // Would be extracted from crash analysis
 			Reproducible: true,
@@ -126,7 +126,7 @@ func (a *CoverageAnalyzer) DetectCrash(result *core.ExecutionResult) (*core.Cras
 	// Check for abnormal exit codes
 	if result.ExitCode != 0 && result.ExitCode != 1 {
 		// This might indicate a crash
-		crashInfo := &core.CrashInfo{
+		crashInfo := &interfaces.CrashInfo{
 			Type:         "ABNORMAL_EXIT",
 			Address:      0,
 			Reproducible: true,
@@ -141,13 +141,13 @@ func (a *CoverageAnalyzer) DetectCrash(result *core.ExecutionResult) (*core.Cras
 
 // DetectHang detects if an execution resulted in a hang
 // Analyzes execution duration and resource usage
-func (a *CoverageAnalyzer) DetectHang(result *core.ExecutionResult) (*core.HangInfo, error) {
+func (a *CoverageAnalyzer) DetectHang(result *interfaces.ExecutionResult) (*interfaces.HangInfo, error) {
 	// Check if execution took too long
 	if result.Duration > 10*time.Second {
-		hangInfo := &core.HangInfo{
+		hangInfo := &interfaces.HangInfo{
 			Duration:   result.Duration,
 			LastOutput: result.Output,
-			ResourceUsage: core.ResourceUsage{
+			ResourceUsage: interfaces.ResourceUsage{
 				PeakMemory: result.MemoryUsage,
 				AvgCPU:     result.CPUUsage,
 			},
@@ -161,7 +161,7 @@ func (a *CoverageAnalyzer) DetectHang(result *core.ExecutionResult) (*core.HangI
 
 // updateGlobalCoverage updates the global coverage tracking
 // Maintains a global view of all coverage seen during fuzzing
-func (a *CoverageAnalyzer) updateGlobalCoverage(coverage *core.Coverage) {
+func (a *CoverageAnalyzer) updateGlobalCoverage(coverage *interfaces.Coverage) {
 	for _, edge := range a.getCoveredEdges(coverage) {
 		a.globalCoverage[edge] = true
 	}
@@ -169,7 +169,7 @@ func (a *CoverageAnalyzer) updateGlobalCoverage(coverage *core.Coverage) {
 
 // getCoveredEdges extracts covered edges from coverage bitmap
 // Converts bitmap to list of covered edge IDs
-func (a *CoverageAnalyzer) getCoveredEdges(coverage *core.Coverage) []uint64 {
+func (a *CoverageAnalyzer) getCoveredEdges(coverage *interfaces.Coverage) []uint64 {
 	edges := make([]uint64, 0, coverage.EdgeCount)
 
 	// Parse bitmap to find covered edges
@@ -187,7 +187,7 @@ func (a *CoverageAnalyzer) getCoveredEdges(coverage *core.Coverage) []uint64 {
 
 // generateMockEdgeCount generates a mock edge count for testing
 // In production, this would come from actual coverage instrumentation
-func (a *CoverageAnalyzer) generateMockEdgeCount(result *core.ExecutionResult) int {
+func (a *CoverageAnalyzer) generateMockEdgeCount(result *interfaces.ExecutionResult) int {
 	// Use execution characteristics to generate realistic coverage
 	baseCount := len(result.Output) / 100
 	if baseCount < 5 {
@@ -221,7 +221,7 @@ func (a *CoverageAnalyzer) createCoverageBitmap(edgeCount int) []byte {
 
 // calculateCoverageHash calculates a hash of the coverage information
 // Used for quick comparison and deduplication
-func (a *CoverageAnalyzer) calculateCoverageHash(coverage *core.Coverage) uint64 {
+func (a *CoverageAnalyzer) calculateCoverageHash(coverage *interfaces.Coverage) uint64 {
 	h := fnv.New64a()
 	h.Write(coverage.Bitmap)
 	h.Write([]byte(fmt.Sprintf("%d", coverage.EdgeCount)))
@@ -230,7 +230,7 @@ func (a *CoverageAnalyzer) calculateCoverageHash(coverage *core.Coverage) uint64
 
 // calculateCrashHash calculates a hash for crash deduplication
 // Uses crash characteristics to identify unique crashes
-func (a *CoverageAnalyzer) calculateCrashHash(result *core.ExecutionResult) string {
+func (a *CoverageAnalyzer) calculateCrashHash(result *interfaces.ExecutionResult) string {
 	h := sha256.New()
 	h.Write([]byte(fmt.Sprintf("%d", result.Signal)))
 	h.Write([]byte(fmt.Sprintf("%d", result.ExitCode)))
@@ -269,7 +269,7 @@ func (a *CoverageAnalyzer) getSignalName(signal int) string {
 
 // extractStackTrace extracts stack trace from execution result
 // In production, this would parse actual stack traces
-func (a *CoverageAnalyzer) extractStackTrace(result *core.ExecutionResult) []string {
+func (a *CoverageAnalyzer) extractStackTrace(result *interfaces.ExecutionResult) []string {
 	// Simplified implementation
 	// In production, would parse actual stack traces from output/error
 	return []string{
