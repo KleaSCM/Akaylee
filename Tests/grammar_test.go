@@ -220,7 +220,6 @@ func TestJSONGrammarTypeConversion(t *testing.T) {
 				switch value.(type) {
 				case float64, int, int64:
 					foundTypeConversion = true
-					break
 				}
 			}
 		}

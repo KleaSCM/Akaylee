@@ -1,0 +1,82 @@
+{
+  "CrashInfo": {
+    "Type": "SIGSEGV",
+    "Address": 0,
+    "StackTrace": [
+      "main.main()",
+      "runtime.main()"
+    ],
+    "Registers": null,
+    "MemoryMap": null,
+    "Reproducible": true,
+    "Hash": "mock_crash_hash",
+    "Metadata": {}
+  },
+  "Reproducible": false,
+  "ReproductionRate": 0,
+  "MinimalTestCase": null,
+  "ReproductionAttempts": 5,
+  "ReproductionTime": 11632464,
+  "StackTraces": [],
+  "RootCauseAnalysis": {
+    "PrimaryCause": "segmentation fault",
+    "SecondaryCauses": [],
+    "Confidence": 0.7,
+    "Evidence": [
+      "Crash type indicates memory access violation"
+    ],
+    "Recommendations": [
+      "Check memory bounds",
+      "Validate pointers",
+      "Use memory sanitizers"
+    ],
+    "CVSSScore": {
+      "base_score": 6.5,
+      "temporal_score": 0,
+      "environmental_score": 0,
+      "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+      "severity": "MEDIUM"
+    },
+    "Metadata": {}
+  },
+  "Exploitability": {
+    "Exploitability": "MEDIUM",
+    "AttackVector": "network",
+    "Complexity": "high",
+    "Privileges": "none",
+    "UserInteraction": "none",
+    "Scope": "unchanged",
+    "Confidence": 0.68,
+    "ProofOfConcept": null,
+    "Metadata": {}
+  },
+  "Metadata": {
+    "triage": {
+      "CrashInfo": {
+        "Type": "SIGSEGV",
+        "Address": 0,
+        "StackTrace": [
+          "main.main()",
+          "runtime.main()"
+        ],
+        "Registers": null,
+        "MemoryMap": null,
+        "Reproducible": true,
+        "Hash": "mock_crash_hash",
+        "Metadata": {}
+      },
+      "Severity": 3,
+      "CrashType": "SEGFAULT",
+      "Exploitability": "MEDIUM",
+      "Confidence": 0.85,
+      "Keywords": [
+        "sigsegv"
+      ],
+      "StackHash": "caebd2d02142c272",
+      "Minimized": false,
+      "MinimizedData": null,
+      "AnalysisTime": 12844,
+      "Metadata": {}
+    }
+  }
+}

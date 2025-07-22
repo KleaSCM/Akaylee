@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/google/uuid"
+	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/coverage"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/sirupsen/logrus"
@@ -63,9 +64,10 @@ type Engine struct {
 	lastStatsUpdate time.Time
 	executionRate   float64
 
-	coverageCollector  coverage.CoverageCollector // For real code coverage
-	seenCoverageHashes map[string]bool            // To avoid duplicate coverage
-	reporters          []Reporter                 // Registered reporters for telemetry
+	coverageCollector      coverage.CoverageCollector       // For real code coverage
+	seenCoverageHashes     map[string]bool                  // To avoid duplicate coverage
+	reporters              []Reporter                       // Registered reporters for telemetry
+	reproducibilityHarness *analysis.ReproducibilityHarness // Crash reproduction and analysis
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -192,6 +194,16 @@ func (e *Engine) SetCoverageCollector(collector coverage.CoverageCollector) {
 // AddReporter registers a Reporter for telemetry and live reporting.
 func (e *Engine) AddReporter(reporter Reporter) {
 	e.reporters = append(e.reporters, reporter)
+}
+
+// SetReproducibilityHarness sets the reproducibility harness for crash analysis
+func (e *Engine) SetReproducibilityHarness(harness *analysis.ReproducibilityHarness) {
+	e.reproducibilityHarness = harness
+}
+
+// GetReproducibilityHarness returns the reproducibility harness
+func (e *Engine) GetReproducibilityHarness() *analysis.ReproducibilityHarness {
+	return e.reproducibilityHarness
 }
 
 // setupLogging configures the logging system based on configuration
@@ -549,6 +561,95 @@ func (e *Engine) handleCrash(result *ExecutionResult) {
 	}
 
 	e.logger.Warnf("Crash detected: %s", result.CrashInfo.Type)
+
+	// Perform reproducibility analysis if harness is available
+	if e.reproducibilityHarness != nil {
+		e.logger.Info("Starting crash reproducibility analysis...")
+
+		// Convert to interface types for the harness
+		var interfaceCrashInfo *interfaces.CrashInfo
+		if result.CrashInfo != nil {
+			interfaceCrashInfo = &interfaces.CrashInfo{
+				Type:         result.CrashInfo.Type,
+				Address:      result.CrashInfo.Address,
+				Reproducible: result.CrashInfo.Reproducible,
+				Hash:         result.CrashInfo.Hash,
+				StackTrace:   result.CrashInfo.StackTrace,
+				Metadata:     make(map[string]interface{}), // Initialize empty metadata
+			}
+		}
+
+		var interfaceHangInfo *interfaces.HangInfo
+		if result.HangInfo != nil {
+			interfaceHangInfo = &interfaces.HangInfo{
+				Duration:   result.HangInfo.Duration,
+				LastOutput: result.HangInfo.LastOutput,
+				ResourceUsage: interfaces.ResourceUsage{
+					PeakMemory: result.HangInfo.ResourceUsage.PeakMemory,
+					AvgCPU:     result.HangInfo.ResourceUsage.AvgCPU,
+				},
+			}
+		}
+
+		var interfaceCoverage *interfaces.Coverage
+		if result.Coverage != nil {
+			interfaceCoverage = &interfaces.Coverage{
+				Timestamp:     result.Coverage.Timestamp,
+				EdgeCount:     result.Coverage.EdgeCount,
+				BlockCount:    result.Coverage.BlockCount,
+				FunctionCount: result.Coverage.FunctionCount,
+				Bitmap:        result.Coverage.Bitmap,
+				Hash:          result.Coverage.Hash,
+			}
+		}
+
+		interfaceResult := &interfaces.ExecutionResult{
+			TestCaseID:  result.TestCaseID,
+			Status:      interfaces.ExecutionStatus(result.Status),
+			ExitCode:    result.ExitCode,
+			Signal:      result.Signal,
+			Output:      result.Output,
+			Error:       result.Error,
+			Duration:    result.Duration,
+			MemoryUsage: result.MemoryUsage,
+			CPUUsage:    result.CPUUsage,
+			CrashInfo:   interfaceCrashInfo,
+			HangInfo:    interfaceHangInfo,
+			Coverage:    interfaceCoverage,
+		}
+
+		// Get the test case from corpus
+		testCase := e.corpus.Get(result.TestCaseID)
+		if testCase != nil {
+			// Convert to interface type
+			interfaceTestCase := &interfaces.TestCase{
+				ID:         testCase.ID,
+				Data:       testCase.Data,
+				ParentID:   testCase.ParentID,
+				Generation: testCase.Generation,
+				CreatedAt:  testCase.CreatedAt,
+				Executions: testCase.Executions,
+				Priority:   testCase.Priority,
+				Metadata:   testCase.Metadata,
+			}
+
+			// Analyze crash reproducibility
+			reproResult, err := e.reproducibilityHarness.AnalyzeCrash(interfaceTestCase, interfaceResult)
+			if err != nil {
+				e.logger.Errorf("Failed to analyze crash reproducibility: %v", err)
+			} else {
+				e.logger.Infof("Crash reproducibility analysis completed: reproducible=%v, rate=%.1f%%",
+					reproResult.Reproducible, reproResult.ReproductionRate*100)
+
+				// Log root cause if available
+				if reproResult.RootCauseAnalysis != nil {
+					e.logger.Infof("Root cause: %s (confidence: %.1f%%)",
+						reproResult.RootCauseAnalysis.PrimaryCause,
+						reproResult.RootCauseAnalysis.Confidence*100)
+				}
+			}
+		}
+	}
 }
 
 // handleHang processes a hang result
