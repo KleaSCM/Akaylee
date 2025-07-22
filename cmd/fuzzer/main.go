@@ -156,9 +156,13 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	fuzzCmd.Flags().BoolVar(&profileMemory, "profile-memory", false, "Enable memory profiling")
 	fuzzCmd.Flags().BoolVar(&coverageGuided, "coverage-guided", false, "Enable coverage-guided fuzzing (Go targets)")
 
-	// Add grammar flag
+	// Add grammar flags
 	fuzzCmd.Flags().StringVar(&grammarType, "grammar", "", "Enable grammar-based fuzzing (e.g., 'json')")
+	fuzzCmd.Flags().StringSlice("grammar-seeds", []string{}, "Seed keys for grammar-based fuzzing (e.g., 'name,age,email')")
+	fuzzCmd.Flags().Int("grammar-depth", 5, "Maximum recursion depth for grammar fuzzing")
 	viper.BindPFlag("grammar_type", fuzzCmd.Flags().Lookup("grammar"))
+	viper.BindPFlag("grammar_seeds", fuzzCmd.Flags().Lookup("grammar-seeds"))
+	viper.BindPFlag("grammar_depth", fuzzCmd.Flags().Lookup("grammar-depth"))
 
 	// Mark required flags
 	fuzzCmd.MarkFlagRequired("target")
@@ -225,9 +229,27 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 
 	var mutators []interfaces.Mutator
 	if grammarType == "json" {
-		mutators = []interfaces.Mutator{
-			strategies.NewGrammarMutator(grammar.NewJSONGrammar()),
+		// Get grammar configuration
+		seedKeys := viper.GetStringSlice("grammar_seeds")
+		maxDepth := viper.GetInt("grammar_depth")
+
+		// Create grammar with configuration
+		jsonGrammar := grammar.NewJSONGrammar()
+		if len(seedKeys) > 0 {
+			jsonGrammar.SetSeedKeys(seedKeys)
 		}
+		jsonGrammar.SetMaxDepth(maxDepth)
+
+		// Create grammar mutator with advanced configuration
+		grammarMutator := strategies.NewGrammarMutatorWithConfig(jsonGrammar, seedKeys, maxDepth)
+
+		mutators = []interfaces.Mutator{grammarMutator}
+
+		logger.Info("Using grammar-based fuzzing", map[string]interface{}{
+			"grammar_type": grammarType,
+			"seed_keys":    seedKeys,
+			"max_depth":    maxDepth,
+		})
 	} else {
 		mutators = []interfaces.Mutator{
 			strategies.NewBitFlipMutator(config.MutationRate),

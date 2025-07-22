@@ -385,30 +385,39 @@ func TestMutationMetadata(t *testing.T) {
 }
 
 func TestGrammarMutator_JSON(t *testing.T) {
-	mutator := strategies.NewGrammarMutator(grammar.NewJSONGrammar())
+	runTest(t, "TestGrammarMutator_JSON", func(t *testing.T) {
+		mutator := strategies.NewGrammarMutator(grammar.NewJSONGrammar())
 
-	// Generate a valid JSON input
-	input, err := grammar.NewJSONGrammar().Generate()
-	require.NoError(t, err)
-	assert.NotEmpty(t, input)
+		// Generate a valid JSON input
+		input, err := grammar.NewJSONGrammar().Generate()
+		require.NoError(t, err)
+		assert.NotEmpty(t, input)
 
-	testCase := &interfaces.TestCase{
-		ID:         "json1",
-		Data:       input,
-		Generation: 0,
-		CreatedAt:  time.Now(),
-		Priority:   100,
-	}
+		testCase := &interfaces.TestCase{
+			ID:         "json1",
+			Data:       input,
+			Generation: 0,
+			CreatedAt:  time.Now(),
+			Priority:   100,
+		}
 
-	mutated, err := mutator.Mutate(testCase)
-	require.NoError(t, err)
-	assert.NotNil(t, mutated)
-	assert.NotEqual(t, string(testCase.Data), string(mutated.Data))
-	assert.Equal(t, "GrammarMutator", mutated.Metadata["mutator"])
-	assert.Equal(t, "JSONGrammar", mutated.Metadata["grammar"])
+		mutated, err := mutator.Mutate(testCase)
+		require.NoError(t, err)
+		assert.NotNil(t, mutated)
+		assert.NotEqual(t, string(testCase.Data), string(mutated.Data))
 
-	// Check that mutated data is still valid JSON
-	var obj map[string]interface{}
-	err = json.Unmarshal(mutated.Data, &obj)
-	assert.NoError(t, err)
+		// Verify enhanced metadata
+		assert.Equal(t, "GrammarMutator", mutated.Metadata["mutator"])
+		assert.Equal(t, "JSONGrammar", mutated.Metadata["grammar"])
+		assert.Contains(t, mutated.Metadata, "mutation_count")
+		assert.Contains(t, mutated.Metadata, "max_depth")
+		assert.Contains(t, mutated.Metadata, "has_seed_keys")
+		assert.Contains(t, mutated.Metadata, "original_size")
+		assert.Contains(t, mutated.Metadata, "mutated_size")
+
+		// Check that mutated data is still valid JSON
+		var parsed interface{}
+		err = json.Unmarshal(mutated.Data, &parsed)
+		assert.NoError(t, err)
+	})
 }

@@ -29,8 +29,15 @@ func FuzzMe(data []byte) {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: target <inputfile>")
+		fmt.Println("Or: target --grammar-demo")
 		os.Exit(1)
 	}
+
+	if os.Args[1] == "--grammar-demo" {
+		runGrammarDemo()
+		return
+	}
+
 	input, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		fmt.Println("Failed to read input:", err)

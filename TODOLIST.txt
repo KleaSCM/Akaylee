@@ -40,12 +40,54 @@ Akaylee Fuzzer TODO
 
 
 
+------
 
 
 
 
 
 
+Add a --dry-run Mode
+
+To verify target setup, configuration parsing, and file permissions without starting fuzzing:
+
+fuzzCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Validate configuration and exit")
+
+Check for it early in runFuzz() and just print out config + validation results.
+2. Expose a --list-mutators Option
+
+Let users print all available mutators (especially once grammar-based ones grow):
+
+// Add a command
+rootCmd.AddCommand(&cobra.Command{
+    Use:   "list-mutators",
+    Short: "List available mutators",
+    Run: func(cmd *cobra.Command, args []string) {
+        fmt.Println("Available mutators:")
+        fmt.Println(" - bitflip")
+        fmt.Println(" - bytesub")
+        fmt.Println(" - arithmetic")
+        fmt.Println(" - crossover")
+        fmt.Println(" - structure-aware")
+        fmt.Println(" - grammar (if --grammar is set)")
+    },
+})
+
+3. Persistent Session UUID
+
+Each fuzzing session could generate a UUID and log it, so outputs can be correlated across distributed systems/logs:
+
+sessionID := uuid.New().String()
+logger.Info("Session started", map[string]interface{}{"session_id": sessionID})
+
+4. Automatic Corpus Shrinking (Optional)
+
+Over time, the corpus might bloat. Introduce optional --shrink-corpus logic that keeps only most interesting cases (e.g., unique edge paths or crash triggers).
+5. Add a Built-in Self-Check
+
+Example: a check subcommand that verifies binary exists, corpus directory is accessible, logs can be written, etc. Very useful for CI/CD integration.
+6. Future Option: Plugin Support
+structure mutators and execution strategy could support user-defined .so plugins with plugin.Open() down the line.
 
 
 
