@@ -119,6 +119,7 @@ type FuzzerStats struct {
 	StartTime           time.Time `json:"start_time"`            // When fuzzing started
 	LastCrashTime       time.Time `json:"last_crash_time"`       // When last crash was found
 	ExecutionsPerSecond float64   `json:"executions_per_second"` // Current execution rate
+	CoveragePoints      int       `json:"coverage_points"`       // Number of unique coverage points found
 }
 
 // IncrementExecutions atomically increments the execution counter

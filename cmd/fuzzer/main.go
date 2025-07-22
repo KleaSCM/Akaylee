@@ -72,6 +72,8 @@ var (
 	logMaxFiles int
 	logMaxSize  int64
 	logCompress bool
+
+	coverageGuided bool // New flag for coverage-guided fuzzing
 )
 
 // Global logger instance
@@ -147,6 +149,7 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	fuzzCmd.Flags().BoolVar(&enableGC, "enable-gc", true, "Enable garbage collection tuning")
 	fuzzCmd.Flags().BoolVar(&profileCPU, "profile-cpu", false, "Enable CPU profiling")
 	fuzzCmd.Flags().BoolVar(&profileMemory, "profile-memory", false, "Enable memory profiling")
+	fuzzCmd.Flags().BoolVar(&coverageGuided, "coverage-guided", false, "Enable coverage-guided fuzzing (Go targets)")
 
 	// Mark required flags
 	fuzzCmd.MarkFlagRequired("target")
@@ -174,6 +177,7 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	viper.BindPFlag("enable_gc", fuzzCmd.Flags().Lookup("enable-gc"))
 	viper.BindPFlag("profile_cpu", fuzzCmd.Flags().Lookup("profile-cpu"))
 	viper.BindPFlag("profile_memory", fuzzCmd.Flags().Lookup("profile-memory"))
+	viper.BindPFlag("coverage_guided", fuzzCmd.Flags().Lookup("coverage-guided"))
 
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
@@ -324,6 +328,10 @@ func setupLogging() error {
 
 // createFuzzerConfig creates the fuzzer configuration from viper
 func createFuzzerConfig() *interfaces.FuzzerConfig {
+	coverageType := viper.GetString("coverage_type")
+	if viper.GetBool("coverage_guided") {
+		coverageType = "go"
+	}
 	return &interfaces.FuzzerConfig{
 		// Target configuration
 		TargetPath: viper.GetString("target_path"),
@@ -346,7 +354,7 @@ func createFuzzerConfig() *interfaces.FuzzerConfig {
 		Strategy:     viper.GetString("strategy"),
 
 		// Coverage configuration
-		CoverageType:  viper.GetString("coverage_type"),
+		CoverageType:  coverageType,
 		BitmapSize:    viper.GetInt("bitmap_size"),
 		EdgeThreshold: viper.GetInt("edge_threshold"),
 

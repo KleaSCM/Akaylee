@@ -623,7 +623,11 @@ func (e *Engine) calculateExecutionRate() {
 
 // GetStats returns current fuzzer statistics
 func (e *Engine) GetStats() *FuzzerStats {
-	return e.stats
+	stats := *e.stats // copy
+	if e.seenCoverageHashes != nil {
+		stats.CoveragePoints = len(e.seenCoverageHashes)
+	}
+	return &stats
 }
 
 // AddTestCase adds a test case to the corpus
