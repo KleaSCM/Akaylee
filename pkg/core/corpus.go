@@ -57,6 +57,11 @@ func (c *Corpus) Add(testCase *TestCase) error {
 	c.testCases[testCase.ID] = testCase
 	c.size++
 
+	// Update max generation if needed
+	if testCase.Generation > c.generation {
+		c.generation = testCase.Generation
+	}
+
 	return nil
 }
 
@@ -217,6 +222,16 @@ func (c *Corpus) cleanupInternal() int {
 	}
 
 	c.size -= removed
+
+	// Recompute max generation
+	maxGen := 0
+	for _, tc := range c.testCases {
+		if tc.Generation > maxGen {
+			maxGen = tc.Generation
+		}
+	}
+	c.generation = maxGen
+
 	return removed
 }
 
@@ -296,4 +311,11 @@ func (c *Corpus) GetStats() map[string]interface{} {
 	}
 
 	return stats
+}
+
+// GetMaxGeneration returns the highest generation number in the corpus.
+func (c *Corpus) GetMaxGeneration() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.generation
 }

@@ -149,6 +149,18 @@ func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 	return result, nil
 }
 
+// calculateAvgCPU computes the average of a slice of float64 values.
+func calculateAvgCPU(samples []float64) float64 {
+	if len(samples) == 0 {
+		return 0.0
+	}
+	total := 0.0
+	for _, sample := range samples {
+		total += sample
+	}
+	return total / float64(len(samples))
+}
+
 // monitorResources monitors resource usage during test case execution
 // Tracks memory and CPU usage for performance analysis
 func (w *Worker) monitorResources(ctx context.Context) (uint64, float64, error) {
@@ -161,7 +173,8 @@ func (w *Worker) monitorResources(ctx context.Context) (uint64, float64, error) 
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			avgCPU := calculateAvgCPU(cpuSamples)
+			return peakMemory, avgCPU, nil
 		case <-ticker.C:
 			// Get current memory usage
 			var m runtime.MemStats
@@ -175,18 +188,6 @@ func (w *Worker) monitorResources(ctx context.Context) (uint64, float64, error) 
 			cpuSamples = append(cpuSamples, cpuUsage)
 		}
 	}
-
-	// Calculate average CPU usage
-	var avgCPU float64
-	if len(cpuSamples) > 0 {
-		total := 0.0
-		for _, sample := range cpuSamples {
-			total += sample
-		}
-		avgCPU = total / float64(len(cpuSamples))
-	}
-
-	return peakMemory, avgCPU, nil
 }
 
 // getCPUUsage returns current CPU usage for the worker

@@ -10,6 +10,7 @@ package core_test
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -461,4 +462,14 @@ type CoreTestSummary struct {
 	Passed     int             `json:"passed"`
 	Failed     int             `json:"failed"`
 	Details    map[string]bool `json:"details"`
+}
+
+// Add TestMain to track and print suite duration
+func TestMain(m *testing.M) {
+	suiteStart = time.Now()
+	code := m.Run()
+	suiteEnd = time.Now()
+	duration := suiteEnd.Sub(suiteStart)
+	fmt.Printf("\n=== Test Suite Duration: %v ===\n", duration)
+	os.Exit(code)
 }
