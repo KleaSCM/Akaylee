@@ -26,7 +26,7 @@ Akaylee Fuzzer TODO
 [x] Built-in Self-Check (system validation for CI/CD)
 [x] Automatic Corpus Shrinking (keep only most interesting cases)
 
-[ ] Advanced input structure inference (grammar-based, protocol-aware)
+[x] Advanced input structure inference (grammar-based, protocol-aware)
 [x] Crash triage and minimization
 [ ] Reproducibility harness (auto-replay of crashes)
 [ ] Differential fuzzing (compare multiple implementations)
