@@ -8,8 +8,19 @@ Akaylee Fuzzer TODO
 [x] Metrics output (per-test, per-suite, timestamped, versioned)
 [x] Corpus management and prioritization
 [x] CLI with config management
+[x] Real code coverage integration (e.g., go-fuzz, libFuzzer, custom)
+[x] Scheduler abstraction and pluggable strategies
+[x] Composite mutator chains
+[x] Reporter/telemetry hooks (logging, Prometheus stub)
+[x] Enterprise logging (syslog/journald, async queue)
+[x] Crash matching (regex/ruleset)
+[x] API polish (Go doc comments, coverage abstraction)
+[x] Executor/Analyzer Reset, Mutator Init
+[x] TestCase enhancements (generation tracking)
+[x] Adapter refactor and execution result mapping
+[x] Thread safety & performance improvements
+[x] Resource monitoring fixes (goroutine leak, avgCPU helper)
 
-[ ] Real code coverage integration (e.g., go-fuzz, libFuzzer, custom)
 [ ] Advanced input structure inference (grammar-based, protocol-aware)
 [ ] Crash triage and minimization
 [ ] Reproducibility harness (auto-replay of crashes)
@@ -20,7 +31,6 @@ Akaylee Fuzzer TODO
 [ ] Advanced resource monitoring (CPU/mem per test)
 [ ] Seed corpus auto-expansion (from real-world data)
 [ ] Fuzzing for non-binary targets (APIs, network, etc.)
-
 
 
 

@@ -124,6 +124,7 @@ type FuzzerConfig struct {
 	LogLevel      string
 	LogFile       string
 	JSONLogs      bool
+	SchedulerType string // Scheduler type: "priority" (default), "coverage-guided", etc.
 }
 
 // Executor interface for executing test cases

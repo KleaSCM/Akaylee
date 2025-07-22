@@ -435,6 +435,7 @@ func printFinalStats(engine *core.Engine) {
 		"avg_executions_per_sec": stats.ExecutionsPerSecond,
 		"total_runtime":          time.Since(stats.StartTime),
 		"last_crash_time":        stats.LastCrashTime,
+		"max_generation":         engine.GetCorpus().GetMaxGeneration(),
 	})
 
 	fmt.Println("\n=== Final Statistics ===")
@@ -447,6 +448,7 @@ func printFinalStats(engine *core.Engine) {
 	fmt.Printf("Coverage Blocks: %d\n", stats.CoverageBlocks)
 	fmt.Printf("Average Executions/sec: %.2f\n", stats.ExecutionsPerSecond)
 	fmt.Printf("Total Runtime: %v\n", time.Since(stats.StartTime))
+	fmt.Printf("Max Test Case Generation: %d\n", engine.GetCorpus().GetMaxGeneration())
 
 	if stats.Crashes > 0 {
 		fmt.Printf("Last Crash: %v\n", stats.LastCrashTime)

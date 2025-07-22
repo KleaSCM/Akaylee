@@ -94,6 +94,15 @@ func (e *Engine) Initialize(config *interfaces.FuzzerConfig) error {
 	// Configure logging
 	e.setupLogging()
 
+	// Select scheduler type based on config
+	// If config.SchedulerType is not set or unknown, use PriorityScheduler
+	switch config.SchedulerType {
+	case "coverage-guided":
+		e.scheduler = NewCoverageGuidedScheduler()
+	default:
+		e.scheduler = NewPriorityScheduler()
+	}
+
 	// Initialize coverage collector if enabled
 	if config.CoverageType == "go" {
 		collector := &coverage.GoCoverageCollector{}
@@ -665,6 +674,13 @@ func (e *Engine) ReportCrash(result *ExecutionResult) error {
 func (e *Engine) ReportHang(result *ExecutionResult) error {
 	e.handleHang(result)
 	return nil
+}
+
+// GetCorpus returns the corpus managed by the engine.
+func (e *Engine) GetCorpus() *Corpus {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.corpus
 }
 
 // Helper to hash coverage profiles (simple, can be improved)
