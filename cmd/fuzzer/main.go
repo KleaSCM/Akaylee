@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -267,8 +268,8 @@ func setupLogging() error {
 }
 
 // createFuzzerConfig creates the fuzzer configuration from viper
-func createFuzzerConfig() *core.FuzzerConfig {
-	return &core.FuzzerConfig{
+func createFuzzerConfig() *interfaces.FuzzerConfig {
+	return &interfaces.FuzzerConfig{
 		// Target configuration
 		TargetPath: viper.GetString("target_path"),
 		TargetArgs: viper.GetStringSlice("target_args"),
@@ -312,7 +313,7 @@ func createFuzzerConfig() *core.FuzzerConfig {
 }
 
 // reportStats periodically reports fuzzer statistics
-func reportStats(ctx context.Context, engine core.FuzzerEngine) {
+func reportStats(ctx context.Context, engine *core.Engine) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -329,7 +330,7 @@ func reportStats(ctx context.Context, engine core.FuzzerEngine) {
 }
 
 // printFinalStats prints final fuzzer statistics
-func printFinalStats(engine core.FuzzerEngine) {
+func printFinalStats(engine *core.Engine) {
 	stats := engine.GetStats()
 
 	fmt.Println("\n=== Final Statistics ===")

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestEngineInitialization(t *testing.T) {
 	engine := core.NewEngine()
 	assert.NotNil(t, engine)
 
-	config := &core.FuzzerConfig{
+	config := &interfaces.FuzzerConfig{
 		TargetPath:    "/bin/echo",
 		CorpusDir:     "./test_corpus",
 		Workers:       2,

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func TestBitFlipMutator(t *testing.T) {
 	mutator := strategies.NewBitFlipMutator(0.5) // 50% mutation rate
 
 	originalData := []byte{0x00, 0xFF, 0x55, 0xAA}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test1",
 		Data:       originalData,
 		Generation: 0,
@@ -58,7 +58,7 @@ func TestByteSubstitutionMutator(t *testing.T) {
 	mutator := strategies.NewByteSubstitutionMutator(0.3) // 30% mutation rate
 
 	originalData := []byte("hello world")
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test2",
 		Data:       originalData,
 		Generation: 1,
@@ -92,7 +92,7 @@ func TestArithmeticMutator(t *testing.T) {
 
 	// Create data with potential numeric values
 	originalData := []byte{0x01, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test3",
 		Data:       originalData,
 		Generation: 2,
@@ -126,7 +126,7 @@ func TestStructureAwareMutator(t *testing.T) {
 
 	// Create data with potential structure
 	originalData := []byte{0x00, 0x05, 0x68, 0x65, 0x6C, 0x6C, 0x6F} // Length + "hello"
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test4",
 		Data:       originalData,
 		Generation: 3,
@@ -159,7 +159,7 @@ func TestCrossOverMutator(t *testing.T) {
 	mutator := strategies.NewCrossOverMutator(0.6) // 60% mutation rate
 
 	originalData := []byte("crossover test data")
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test5",
 		Data:       originalData,
 		Generation: 4,
@@ -192,7 +192,7 @@ func TestMutationRateZero(t *testing.T) {
 	mutator := strategies.NewBitFlipMutator(0.0) // 0% mutation rate
 
 	originalData := []byte{0x00, 0xFF, 0x55, 0xAA}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test6",
 		Data:       originalData,
 		Generation: 0,
@@ -214,7 +214,7 @@ func TestMutationRateOne(t *testing.T) {
 	mutator := strategies.NewBitFlipMutator(1.0) // 100% mutation rate
 
 	originalData := []byte{0x00, 0xFF}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "test7",
 		Data:       originalData,
 		Generation: 0,
@@ -236,7 +236,7 @@ func TestMutationRateOne(t *testing.T) {
 func TestEmptyTestCase(t *testing.T) {
 	mutator := strategies.NewByteSubstitutionMutator(0.5)
 
-	emptyTestCase := &core.TestCase{
+	emptyTestCase := &interfaces.TestCase{
 		ID:         "empty",
 		Data:       []byte{},
 		Generation: 0,
@@ -261,7 +261,7 @@ func TestLargeTestCase(t *testing.T) {
 		largeData[i] = byte(i % 256)
 	}
 
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "large",
 		Data:       largeData,
 		Generation: 0,
@@ -281,7 +281,7 @@ func TestMutationConsistency(t *testing.T) {
 	mutator := strategies.NewBitFlipMutator(0.5)
 
 	originalData := []byte{0x00, 0xFF, 0x55, 0xAA}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "consistency",
 		Data:       originalData,
 		Generation: 0,
@@ -317,7 +317,7 @@ func TestMutationConsistency(t *testing.T) {
 func TestMutationPreservesLength(t *testing.T) {
 	mutators := []struct {
 		name    string
-		mutator strategies.Mutator
+		mutator interfaces.Mutator
 	}{
 		{"BitFlip", strategies.NewBitFlipMutator(0.5)},
 		{"ByteSubstitution", strategies.NewByteSubstitutionMutator(0.5)},
@@ -327,7 +327,7 @@ func TestMutationPreservesLength(t *testing.T) {
 	}
 
 	originalData := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "length_test",
 		Data:       originalData,
 		Generation: 0,
@@ -349,7 +349,7 @@ func TestMutationPreservesLength(t *testing.T) {
 func TestMutationMetadata(t *testing.T) {
 	mutators := []struct {
 		name    string
-		mutator strategies.Mutator
+		mutator interfaces.Mutator
 	}{
 		{"BitFlip", strategies.NewBitFlipMutator(0.5)},
 		{"ByteSubstitution", strategies.NewByteSubstitutionMutator(0.5)},
@@ -358,7 +358,7 @@ func TestMutationMetadata(t *testing.T) {
 		{"CrossOver", strategies.NewCrossOverMutator(0.5)},
 	}
 
-	testCase := &core.TestCase{
+	testCase := &interfaces.TestCase{
 		ID:         "metadata_test",
 		Data:       []byte{0x01, 0x02, 0x03},
 		Generation: 0,
