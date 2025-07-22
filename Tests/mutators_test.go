@@ -11,6 +11,7 @@ package core_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -184,7 +185,9 @@ func TestCrossOverMutator(t *testing.T) {
 
 	// Test mutator interface
 	assert.Equal(t, "CrossOverMutator", mutator.Name())
-	assert.Contains(t, mutator.Description(), "combines")
+	// Use case-insensitive check for description
+	desc := mutator.Description()
+	assert.Contains(t, strings.ToLower(desc), "combines")
 }
 
 // TestMutationRateZero tests mutation with zero mutation rate

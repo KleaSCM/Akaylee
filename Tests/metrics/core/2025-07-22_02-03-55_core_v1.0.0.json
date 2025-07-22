@@ -1,0 +1,22 @@
+{
+  "duration_seconds": 0.002050655,
+  "end_time": "2025-07-22T02:03:55Z",
+  "failed": 0,
+  "passed": 2,
+  "start_time": "2025-07-22T02:03:55Z",
+  "tests": [
+    {
+      "name": "TestEngineInitialization",
+      "passed": true,
+      "duration_ms": 0.143
+    },
+    {
+      "name": "TestWorkerCreation",
+      "passed": true,
+      "duration_ms": 0.003
+    }
+  ],
+  "timestamp": "2025-07-22 02:03:55",
+  "total_tests": 2,
+  "version": "1.0.0"
+}

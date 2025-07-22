@@ -1,0 +1,27 @@
+{
+  "duration_seconds": 0.002310034,
+  "end_time": "2025-07-22T02:06:32Z",
+  "failed": 1,
+  "passed": 2,
+  "start_time": "2025-07-22T02:06:32Z",
+  "tests": [
+    {
+      "name": "TestEngineInitialization",
+      "passed": true,
+      "duration_ms": 0.092
+    },
+    {
+      "name": "TestCorpusCleanup",
+      "passed": false,
+      "duration_ms": 0.08
+    },
+    {
+      "name": "TestWorkerCreation",
+      "passed": true,
+      "duration_ms": 0.003
+    }
+  ],
+  "timestamp": "2025-07-22 02:06:32",
+  "total_tests": 3,
+  "version": "1.0.0"
+}

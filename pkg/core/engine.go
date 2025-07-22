@@ -18,7 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"crypto/sha256"
+
 	"github.com/google/uuid"
+	"github.com/kleascm/akaylee-fuzzer/pkg/coverage"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/sirupsen/logrus"
 )
@@ -59,6 +62,9 @@ type Engine struct {
 	// Performance tracking
 	lastStatsUpdate time.Time
 	executionRate   float64
+
+	coverageCollector  coverage.CoverageCollector // For real code coverage
+	seenCoverageHashes map[string]bool            // To avoid duplicate coverage
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -68,9 +74,10 @@ func NewEngine() *Engine {
 		stats: &FuzzerStats{
 			StartTime: time.Now(),
 		},
-		logger: logrus.New(),
-		corpus: NewCorpus(),
-		queue:  NewPriorityQueue(),
+		logger:             logrus.New(),
+		corpus:             NewCorpus(),
+		queue:              NewPriorityQueue(),
+		seenCoverageHashes: make(map[string]bool),
 	}
 }
 
@@ -85,6 +92,16 @@ func (e *Engine) Initialize(config *interfaces.FuzzerConfig) error {
 
 	// Configure logging
 	e.setupLogging()
+
+	// Initialize coverage collector if enabled
+	if config.CoverageType == "go" {
+		collector := &coverage.GoCoverageCollector{}
+		err := collector.Prepare(config.TargetPath, config.TargetArgs)
+		if err != nil {
+			return fmt.Errorf("failed to prepare coverage collector: %w", err)
+		}
+		e.coverageCollector = collector
+	}
 
 	// Initialize executor (will be set by dependency injection)
 	if e.executor == nil {
@@ -155,6 +172,11 @@ func (e *Engine) SetMutators(mutators []interfaces.Mutator) {
 			Metadata:   ctc.Metadata,
 		}
 	}
+}
+
+// SetCoverageCollector sets the coverage collector for the engine
+func (e *Engine) SetCoverageCollector(collector coverage.CoverageCollector) {
+	e.coverageCollector = collector
 }
 
 // setupLogging configures the logging system based on configuration
@@ -453,6 +475,28 @@ func (e *Engine) processResult(result *ExecutionResult) {
 		return
 	}
 
+	// Collect real coverage if enabled
+	var newCoverage bool
+	if e.coverageCollector != nil {
+		covInfo, err := e.coverageCollector.Collect(result.Output, nil)
+		if err != nil {
+			e.logger.Warnf("Coverage collection failed: %v", err)
+		} else {
+			// Use the raw profile as a hash for simplicity (can be improved)
+			covHash := coverageHash(covInfo.RawProfile)
+			if !e.seenCoverageHashes[covHash] {
+				e.seenCoverageHashes[covHash] = true
+				newCoverage = true
+				e.logger.Infof("New coverage found! Hash: %s", covHash)
+				e.logger.Infof("Total unique coverage points: %d", len(e.seenCoverageHashes))
+			} else {
+				newCoverage = false
+			}
+			// Optionally, update result.Coverage or log coverage info
+			e.logger.Debugf("Collected coverage: %d blocks", len(covInfo.CoveredBlocks))
+		}
+	}
+
 	// Get test case from corpus
 	testCase := e.corpus.Get(result.TestCaseID)
 	if testCase == nil {
@@ -474,9 +518,9 @@ func (e *Engine) processResult(result *ExecutionResult) {
 		e.handleHang(result)
 	}
 
-	// Check if test case is interesting
-	if e.analyzer.IsInteresting(testCase) {
-		testCase.Priority = e.calculatePriority(testCase)
+	// Check if test case is interesting (new coverage or analyzer says so)
+	if newCoverage || e.analyzer.IsInteresting(testCase) {
+		testCase.Priority = e.calculatePriority(testCase) + 100 // Boost for new coverage
 		e.queue.Put(testCase)
 	}
 }
@@ -602,4 +646,12 @@ func (e *Engine) ReportCrash(result *ExecutionResult) error {
 func (e *Engine) ReportHang(result *ExecutionResult) error {
 	e.handleHang(result)
 	return nil
+}
+
+// Helper to hash coverage profiles (simple, can be improved)
+func coverageHash(profile string) string {
+	// Use SHA256 for robust coverage profile hashing
+	h := sha256.New()
+	h.Write([]byte(profile))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }

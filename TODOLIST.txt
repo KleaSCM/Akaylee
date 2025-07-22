@@ -1,0 +1,22 @@
+Akaylee Fuzzer TODO
+
+[x] Modular engine with concurrency and priority queue
+[x] Multiple mutation strategies (bit flip, byte substitution, arithmetic, structure-aware, crossover)
+[x] Process execution with resource limits
+[x] Basic crash and hang detection
+[x] Logging (structured, timestamped, beautiful)
+[x] Metrics output (per-test, per-suite, timestamped, versioned)
+[x] Corpus management and prioritization
+[x] CLI with config management
+
+[ ] Real code coverage integration (e.g., go-fuzz, libFuzzer, custom)
+[ ] Advanced input structure inference (grammar-based, protocol-aware)
+[ ] Crash triage and minimization
+[ ] Reproducibility harness (auto-replay of crashes)
+[ ] Differential fuzzing (compare multiple implementations)
+[ ] State-aware fuzzing (for stateful targets)
+[ ] In-depth reporting (HTML, dashboards, etc.)
+[ ] CI/CD integration for automated regression fuzzing
+[ ] Advanced resource monitoring (CPU/mem per test)
+[ ] Seed corpus auto-expansion (from real-world data)
+[ ] Fuzzing for non-binary targets (APIs, network, etc.)
