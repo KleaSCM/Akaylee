@@ -19,6 +19,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
+	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
+	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 	"github.com/sirupsen/logrus"
 )
 
@@ -82,13 +85,13 @@ func (e *Engine) Initialize(config *FuzzerConfig) error {
 	e.setupLogging()
 
 	// Initialize executor
-	e.executor = NewProcessExecutor()
+	e.executor = execution.NewProcessExecutor()
 	if err := e.executor.Initialize(config); err != nil {
 		return fmt.Errorf("failed to initialize executor: %w", err)
 	}
 
 	// Initialize analyzer
-	e.analyzer = NewCoverageAnalyzer()
+	e.analyzer = analysis.NewCoverageAnalyzer()
 
 	// Initialize mutators
 	e.initializeMutators()
@@ -129,11 +132,11 @@ func (e *Engine) setupLogging() {
 // Creates a diverse set of mutators for different types of input manipulation
 func (e *Engine) initializeMutators() {
 	e.mutators = []Mutator{
-		NewBitFlipMutator(e.config.MutationRate),
-		NewByteSubstitutionMutator(e.config.MutationRate),
-		NewArithmeticMutator(e.config.MutationRate),
-		NewStructureAwareMutator(e.config.MutationRate),
-		NewCrossOverMutator(e.config.MutationRate),
+		strategies.NewBitFlipMutator(e.config.MutationRate),
+		strategies.NewByteSubstitutionMutator(e.config.MutationRate),
+		strategies.NewArithmeticMutator(e.config.MutationRate),
+		strategies.NewStructureAwareMutator(e.config.MutationRate),
+		strategies.NewCrossOverMutator(e.config.MutationRate),
 	}
 
 	e.logger.Infof("Initialized %d mutators", len(e.mutators))
