@@ -17,9 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
+	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -207,6 +210,23 @@ func runFuzz(cmd *cobra.Command, args []string) error {
 
 	// Create and initialize fuzzer engine
 	engine := core.NewEngine()
+
+	// Set up real executor, analyzer, and mutators
+	executor := execution.NewProcessExecutor()
+	executor.Initialize(config) // Ensure config is set for the executor
+	analyzer := analysis.NewCoverageAnalyzer()
+	mutators := []interfaces.Mutator{
+		strategies.NewBitFlipMutator(config.MutationRate),
+		strategies.NewByteSubstitutionMutator(config.MutationRate),
+		strategies.NewArithmeticMutator(config.MutationRate),
+		strategies.NewStructureAwareMutator(config.MutationRate),
+		strategies.NewCrossOverMutator(config.MutationRate),
+	}
+
+	engine.SetExecutor(executor)
+	engine.SetAnalyzer(analyzer)
+	engine.SetMutators(mutators)
+
 	if err := engine.Initialize(config); err != nil {
 		return fmt.Errorf("failed to initialize fuzzer engine: %w", err)
 	}
@@ -275,9 +295,8 @@ func loadConfig() error {
 
 	// Read configuration file
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("failed to read config file: %w", err)
-		}
+		// Only warn, never fail
+		fmt.Fprintf(os.Stderr, "Warning: failed to read config file: %v\n", err)
 	}
 
 	return nil

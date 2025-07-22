@@ -39,14 +39,26 @@ func (e *ProcessExecutor) Initialize(config *interfaces.FuzzerConfig) error {
 // Execute runs a test case and returns the execution result
 // Handles process creation, monitoring, and result collection
 func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.ExecutionResult, error) {
+	// Write input to temp file
+	tmpfile, err := os.CreateTemp("", "fuzzinput")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpfile.Name())
+	if _, err := tmpfile.Write(testCase.Data); err != nil {
+		tmpfile.Close()
+		return nil, err
+	}
+	tmpfile.Close()
+
 	// Create execution result
 	result := &interfaces.ExecutionResult{
 		TestCaseID: testCase.ID,
 		Status:     interfaces.StatusSuccess,
 	}
 
-	// Create command
-	cmd := exec.Command(e.config.TargetPath, e.config.TargetArgs...)
+	// Build command: target <inputfile>
+	cmd := exec.Command(e.config.TargetPath, tmpfile.Name())
 
 	// Set up input/output pipes
 	stdin, err := cmd.StdinPipe()
