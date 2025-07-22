@@ -21,11 +21,15 @@ import (
 	"syscall"
 	"time"
 
+	"encoding/json"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
 	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
 	"github.com/kleascm/akaylee-fuzzer/pkg/grammar"
+	"github.com/kleascm/akaylee-fuzzer/pkg/inference"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
@@ -114,6 +118,9 @@ cases in target applications with exceptional efficiency.`,
 	rootCmd.PersistentFlags().Int64Var(&logMaxSize, "log-max-size", 100*1024*1024, "Maximum log file size in bytes")
 	rootCmd.PersistentFlags().BoolVar(&logCompress, "log-compress", false, "Compress rotated log files")
 
+	// Add inference-specific flags
+	rootCmd.PersistentFlags().String("format", "auto", "Format for inference (json, binary, auto)")
+
 	// Bind flags to viper
 	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
 	viper.BindPFlag("json_logs", rootCmd.PersistentFlags().Lookup("json-logs"))
@@ -122,6 +129,7 @@ cases in target applications with exceptional efficiency.`,
 	viper.BindPFlag("log_max_files", rootCmd.PersistentFlags().Lookup("log-max-files"))
 	viper.BindPFlag("log_max_size", rootCmd.PersistentFlags().Lookup("log-max-size"))
 	viper.BindPFlag("log_compress", rootCmd.PersistentFlags().Lookup("log-compress"))
+	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
 
 	// Add fuzz command
 	fuzzCmd := &cobra.Command{
@@ -224,6 +232,30 @@ of their capabilities and use cases.`,
 log writability, and other prerequisites for successful fuzzing. Very useful for CI/CD integration.`,
 		RunE: performSelfCheck,
 	})
+
+	// Add triage command for crash analysis and minimization
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "triage",
+		Short: "Analyze and minimize crash files",
+		Long: `Analyze crash files for severity, exploitability, and automatically minimize them
+to their smallest reproducing form. Provides intelligent crash classification and prioritization.`,
+		RunE: performCrashTriage,
+	})
+
+	// Add infer-grammar command for structure inference
+	inferGrammarCmd := &cobra.Command{
+		Use:   "infer-grammar",
+		Short: "Infer grammar from sample corpus",
+		Long: `Analyze a corpus of sample inputs to automatically infer structure, field types,
+nesting, enums, and generate a grammar for structure-aware fuzzing. Supports JSON and binary formats.`,
+		RunE: performGrammarInference,
+	}
+
+	// Add infer-grammar flags
+	inferGrammarCmd.Flags().String("corpus-dir", "./corpus", "Directory containing sample corpus")
+	viper.BindPFlag("corpus_dir", inferGrammarCmd.Flags().Lookup("corpus-dir"))
+
+	rootCmd.AddCommand(inferGrammarCmd)
 
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
@@ -959,4 +991,430 @@ func checkConfigurationValidation() error {
 	}
 
 	return nil
+}
+
+// performCrashTriage analyzes and minimizes crash files
+func performCrashTriage(cmd *cobra.Command, args []string) error {
+	fmt.Println("🔍 Akaylee Fuzzer - Crash Triage & Minimization")
+	fmt.Println("===============================================")
+	fmt.Println()
+
+	// Load configuration first
+	if err := loadConfig(); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Setup logging for triage
+	if err := setupLogging(); err != nil {
+		return fmt.Errorf("failed to setup logging: %w", err)
+	}
+
+	// Get crash directory from config or default
+	crashDir := viper.GetString("crash_dir")
+	if crashDir == "" {
+		crashDir = "./crashes"
+	}
+
+	fmt.Printf("📁 Analyzing crashes in: %s\n", crashDir)
+	fmt.Println()
+
+	// Check if crash directory exists
+	if _, err := os.Stat(crashDir); os.IsNotExist(err) {
+		fmt.Printf("❌ Crash directory not found: %s\n", crashDir)
+		fmt.Println("   Run the fuzzer first to generate crash files.")
+		return nil
+	}
+
+	// Find crash files
+	files, err := filepath.Glob(filepath.Join(crashDir, "*"))
+	if err != nil {
+		return fmt.Errorf("failed to read crash directory: %w", err)
+	}
+
+	crashFiles := make([]string, 0)
+	for _, file := range files {
+		if info, err := os.Stat(file); err == nil && !info.IsDir() {
+			crashFiles = append(crashFiles, file)
+		}
+	}
+
+	if len(crashFiles) == 0 {
+		fmt.Println("📭 No crash files found.")
+		fmt.Println("   Run the fuzzer first to generate crash files.")
+		return nil
+	}
+
+	fmt.Printf("📊 Found %d crash files\n", len(crashFiles))
+	fmt.Println()
+
+	// Create triage engine
+	triageEngine := analysis.NewCrashTriageEngine()
+
+	// Analyze each crash file
+	results := make([]*analysis.TriageResult, 0)
+	for i, crashFile := range crashFiles {
+		fmt.Printf("🔍 Analyzing crash %d/%d: %s\n", i+1, len(crashFiles), filepath.Base(crashFile))
+
+		// Read crash file
+		data, err := os.ReadFile(crashFile)
+		if err != nil {
+			fmt.Printf("  ❌ Failed to read crash file: %v\n", err)
+			continue
+		}
+
+		// Create mock execution result for analysis
+		result := &interfaces.ExecutionResult{
+			TestCaseID: filepath.Base(crashFile),
+			Output:     data,
+			Error:      []byte{},
+			Status:     interfaces.StatusCrash,
+			Duration:   time.Second,
+		}
+
+		// Create mock crash info
+		crashInfo := &interfaces.CrashInfo{
+			Type:         "SIGSEGV",
+			Address:      0,
+			Reproducible: true,
+			Hash:         fmt.Sprintf("crash_%d", i),
+			StackTrace:   []string{"main.crash()", "libc.so.6", "???"},
+		}
+
+		// Perform triage analysis
+		triage := triageEngine.TriageCrash(crashInfo, result)
+		results = append(results, triage)
+
+		// Print analysis results
+		fmt.Printf("  📊 Severity: %s\n", triage.Severity.String())
+		fmt.Printf("  🎯 Type: %s\n", triage.CrashType)
+		fmt.Printf("  ⚡ Exploitability: %s\n", triage.Exploitability)
+		fmt.Printf("  🎯 Confidence: %.2f\n", triage.Confidence)
+		fmt.Printf("  🔑 Keywords: %v\n", triage.Keywords)
+		fmt.Printf("  ⏱️  Analysis Time: %v\n", triage.AnalysisTime)
+		fmt.Println()
+	}
+
+	// Generate summary report
+	fmt.Println("📋 Crash Triage Summary")
+	fmt.Println("=======================")
+
+	// Count by severity
+	severityCounts := make(map[analysis.CrashSeverity]int)
+	exploitabilityCounts := make(map[analysis.Exploitability]int)
+
+	for _, result := range results {
+		severityCounts[result.Severity]++
+		exploitabilityCounts[result.Exploitability]++
+	}
+
+	fmt.Println("Severity Distribution:")
+	for severity := analysis.SeverityLow; severity <= analysis.SeverityCritical; severity++ {
+		count := severityCounts[severity]
+		if count > 0 {
+			fmt.Printf("  %s: %d crashes\n", severity.String(), count)
+		}
+	}
+
+	fmt.Println("\nExploitability Distribution:")
+	exploitabilities := []analysis.Exploitability{
+		analysis.ExploitabilityNone,
+		analysis.ExploitabilityLow,
+		analysis.ExploitabilityMedium,
+		analysis.ExploitabilityHigh,
+		analysis.ExploitabilityConfirmed,
+	}
+	for _, exploitability := range exploitabilities {
+		count := exploitabilityCounts[exploitability]
+		if count > 0 {
+			fmt.Printf("  %s: %d crashes\n", exploitability, count)
+		}
+	}
+
+	// Find most critical crashes
+	fmt.Println("\n🚨 Most Critical Crashes:")
+	criticalCrashes := 0
+	for i, result := range results {
+		if result.Severity >= analysis.SeverityHigh {
+			fmt.Printf("  %d. %s (Severity: %s, Exploitability: %s)\n",
+				criticalCrashes+1,
+				filepath.Base(crashFiles[i]),
+				result.Severity.String(),
+				result.Exploitability)
+			criticalCrashes++
+		}
+	}
+
+	if criticalCrashes == 0 {
+		fmt.Println("  No critical crashes found.")
+	}
+
+	// Demonstrate minimization
+	fmt.Println("\n🔧 Crash Minimization Demo:")
+	if len(crashFiles) > 0 {
+		// Use first crash file for demonstration
+		demoFile := crashFiles[0]
+		data, _ := os.ReadFile(demoFile)
+
+		demoTestCase := &interfaces.TestCase{
+			ID:   "demo",
+			Data: data,
+		}
+
+		demoResult := &interfaces.ExecutionResult{
+			TestCaseID: "demo",
+			Output:     data,
+			Status:     interfaces.StatusCrash,
+		}
+
+		minimized, err := triageEngine.MinimizeCrash(demoTestCase, demoResult)
+		if err == nil {
+			reductionRatio := float64(len(minimized.Data)) / float64(len(data))
+			fmt.Printf("  Original size: %d bytes\n", len(data))
+			fmt.Printf("  Minimized size: %d bytes\n", len(minimized.Data))
+			fmt.Printf("  Reduction ratio: %.2f%%\n", (1-reductionRatio)*100)
+		}
+	}
+
+	fmt.Println("\n✨ Crash triage completed!")
+	fmt.Println("   Use the severity and exploitability information to prioritize bug fixes.")
+
+	return nil
+}
+
+// performGrammarInference analyzes a corpus and infers a grammar
+func performGrammarInference(cmd *cobra.Command, args []string) error {
+	fmt.Println("🧬 Akaylee Fuzzer - Grammar Inference")
+	fmt.Println("=====================================")
+	fmt.Println()
+
+	// Load configuration first
+	if err := loadConfig(); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Setup logging for inference
+	if err := setupLogging(); err != nil {
+		return fmt.Errorf("failed to setup logging: %w", err)
+	}
+
+	// Get corpus directory from config or default
+	corpusDir := viper.GetString("corpus_dir")
+	if corpusDir == "" {
+		corpusDir = "./corpus"
+	}
+
+	// Get format from flags or auto-detect
+	format := viper.GetString("format")
+	if format == "" {
+		format = "auto"
+	}
+
+	fmt.Printf("📁 Analyzing corpus in: %s\n", corpusDir)
+	fmt.Printf("🎯 Format: %s\n", format)
+	fmt.Println()
+
+	// Check if corpus directory exists
+	if _, err := os.Stat(corpusDir); os.IsNotExist(err) {
+		fmt.Printf("❌ Corpus directory not found: %s\n", corpusDir)
+		fmt.Println("   Create a corpus directory with sample files first.")
+		return nil
+	}
+
+	// Find sample files
+	files, err := filepath.Glob(filepath.Join(corpusDir, "*"))
+	if err != nil {
+		return fmt.Errorf("failed to read corpus directory: %w", err)
+	}
+
+	sampleFiles := make([]string, 0)
+	for _, file := range files {
+		if info, err := os.Stat(file); err == nil && !info.IsDir() {
+			sampleFiles = append(sampleFiles, file)
+		}
+	}
+
+	if len(sampleFiles) == 0 {
+		fmt.Println("📭 No sample files found.")
+		fmt.Println("   Add sample files to the corpus directory first.")
+		return nil
+	}
+
+	fmt.Printf("📊 Found %d sample files\n", len(sampleFiles))
+	fmt.Println()
+
+	// Auto-detect format if needed
+	if format == "auto" {
+		format = autoDetectFormat(sampleFiles)
+		fmt.Printf("🔍 Auto-detected format: %s\n", format)
+		fmt.Println()
+	}
+
+	// Create inference engine
+	engine := inference.NewEngine(format)
+	if engine == nil {
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+
+	// Load samples
+	samples := make([][]byte, 0, len(sampleFiles))
+	for i, sampleFile := range sampleFiles {
+		fmt.Printf("📖 Loading sample %d/%d: %s\n", i+1, len(sampleFiles), filepath.Base(sampleFile))
+
+		data, err := os.ReadFile(sampleFile)
+		if err != nil {
+			fmt.Printf("  ❌ Failed to read sample file: %v\n", err)
+			continue
+		}
+		samples = append(samples, data)
+	}
+
+	if len(samples) == 0 {
+		fmt.Println("❌ No valid samples loaded.")
+		return nil
+	}
+
+	fmt.Printf("✅ Loaded %d valid samples\n", len(samples))
+	fmt.Println()
+
+	// Perform inference
+	fmt.Println("🧠 Performing structure inference...")
+	startTime := time.Now()
+
+	grammar, err := engine.InferStructure(samples)
+	if err != nil {
+		return fmt.Errorf("inference failed: %w", err)
+	}
+
+	inferenceTime := time.Since(startTime)
+	fmt.Printf("✅ Inference completed in %v\n", inferenceTime)
+	fmt.Println()
+
+	// Display results
+	fmt.Println("📋 Inferred Grammar")
+	fmt.Println("===================")
+	fmt.Printf("Format: %s\n", grammar.Format)
+	fmt.Printf("Root Rule: %s\n", grammar.RootRule)
+	fmt.Printf("Samples Analyzed: %v\n", grammar.Metadata["samples"])
+	fmt.Println()
+
+	// Pretty print the grammar
+	fmt.Println("📝 Grammar Rules:")
+	prettyPrintGrammar(grammar)
+
+	// Save grammar to file
+	outputFile := fmt.Sprintf("inferred_grammar_%s.json", format)
+	if err := saveGrammar(grammar, outputFile); err != nil {
+		fmt.Printf("⚠️  Failed to save grammar: %v\n", err)
+	} else {
+		fmt.Printf("💾 Grammar saved to: %s\n", outputFile)
+	}
+
+	fmt.Println("\n✨ Grammar inference completed!")
+	fmt.Println("   Use the inferred grammar with --grammar-type and --grammar-file flags.")
+
+	return nil
+}
+
+// autoDetectFormat attempts to detect the format of sample files
+func autoDetectFormat(files []string) string {
+	if len(files) == 0 {
+		return "json" // Default
+	}
+
+	// Check first few files for format indicators
+	for _, file := range files[:min(3, len(files))] {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+
+		// Try to parse as JSON
+		var v interface{}
+		if json.Unmarshal(data, &v) == nil {
+			return "json"
+		}
+
+		// Check for binary indicators (non-printable characters)
+		if len(data) > 0 {
+			binaryCount := 0
+			for _, b := range data {
+				if b < 32 && b != 9 && b != 10 && b != 13 { // Not tab, newline, carriage return
+					binaryCount++
+				}
+			}
+			if float64(binaryCount)/float64(len(data)) > 0.1 {
+				return "binary"
+			}
+		}
+	}
+
+	return "json" // Default to JSON
+}
+
+// prettyPrintGrammar displays the grammar in a readable format
+func prettyPrintGrammar(grammar *inference.Grammar) {
+	rootRule := grammar.Rules["root"]
+	if rootRule == nil {
+		fmt.Println("  No root rule found")
+		return
+	}
+
+	if rule, ok := rootRule.(map[string]interface{}); ok {
+		printRule("root", rule, 2)
+	}
+}
+
+// printRule recursively prints a grammar rule
+func printRule(name string, rule map[string]interface{}, indent int) {
+	indentStr := strings.Repeat("  ", indent)
+
+	if types, ok := rule["types"].([]string); ok {
+		fmt.Printf("%s%s: %s\n", indentStr, name, strings.Join(types, "|"))
+	}
+
+	if fields, ok := rule["fields"].(map[string]interface{}); ok {
+		fmt.Printf("%s  fields:\n", indentStr)
+		for fieldName, fieldRule := range fields {
+			if fr, ok := fieldRule.(map[string]interface{}); ok {
+				printRule(fieldName, fr, indent+2)
+			}
+		}
+	}
+
+	if required, ok := rule["required"].([]string); ok && len(required) > 0 {
+		fmt.Printf("%s  required: %s\n", indentStr, strings.Join(required, ", "))
+	}
+
+	if optional, ok := rule["optional"].([]string); ok && len(optional) > 0 {
+		fmt.Printf("%s  optional: %s\n", indentStr, strings.Join(optional, ", "))
+	}
+
+	if enum, ok := rule["enum"].([]string); ok && len(enum) > 0 {
+		fmt.Printf("%s  enum: %s\n", indentStr, strings.Join(enum, ", "))
+	}
+
+	if min, ok := rule["min"].(float64); ok {
+		fmt.Printf("%s  min: %v\n", indentStr, min)
+	}
+
+	if max, ok := rule["max"].(float64); ok {
+		fmt.Printf("%s  max: %v\n", indentStr, max)
+	}
+}
+
+// saveGrammar saves the grammar to a JSON file
+func saveGrammar(grammar *inference.Grammar, filename string) error {
+	data, err := json.MarshalIndent(grammar, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

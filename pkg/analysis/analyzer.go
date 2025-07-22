@@ -57,11 +57,12 @@ func (m *RegexCrashMatcher) IsInterestingCrash(crash *interfaces.CrashInfo, resu
 
 // CoverageAnalyzer implements the Analyzer interface
 // Provides coverage tracking and result analysis capabilities
-// Now supports crash matching
+// Now supports crash matching and triage
 type CoverageAnalyzer struct {
-	globalCoverage map[uint64]bool // Global coverage bitmap
-	edgeThreshold  int             // Minimum edges for interesting test case
-	crashMatcher   CrashMatcher    // Optional crash matcher
+	globalCoverage map[uint64]bool    // Global coverage bitmap
+	edgeThreshold  int                // Minimum edges for interesting test case
+	crashMatcher   CrashMatcher       // Optional crash matcher
+	triageEngine   *CrashTriageEngine // Crash triage and minimization engine
 }
 
 // NewCoverageAnalyzer creates a new coverage analyzer instance
@@ -69,6 +70,7 @@ func NewCoverageAnalyzer() *CoverageAnalyzer {
 	return &CoverageAnalyzer{
 		globalCoverage: make(map[uint64]bool),
 		edgeThreshold:  10, // Default threshold
+		triageEngine:   NewCrashTriageEngine(),
 	}
 }
 
@@ -150,7 +152,7 @@ func (a *CoverageAnalyzer) GetCoverage(result *interfaces.ExecutionResult) (*int
 
 // DetectCrash detects if an execution resulted in a crash
 // Analyzes exit codes, signals, and output for crash indicators
-// Now uses crash matcher if set
+// Now uses crash matcher and triage engine
 func (a *CoverageAnalyzer) DetectCrash(result *interfaces.ExecutionResult) (*interfaces.CrashInfo, error) {
 	var crashInfo *interfaces.CrashInfo
 	if result.Signal != 0 {
@@ -169,14 +171,35 @@ func (a *CoverageAnalyzer) DetectCrash(result *interfaces.ExecutionResult) (*int
 			Hash:         a.calculateCrashHash(result),
 		}
 	}
-	if crashInfo != nil && a.crashMatcher != nil {
-		if a.crashMatcher.IsInterestingCrash(crashInfo, result) {
-			crashInfo.Metadata = map[string]interface{}{"interesting": true}
-		}
-	}
+
 	if crashInfo != nil {
+		// Use crash matcher if set
+		if a.crashMatcher != nil {
+			if a.crashMatcher.IsInterestingCrash(crashInfo, result) {
+				crashInfo.Metadata = map[string]interface{}{"interesting": true}
+			}
+		}
+
+		// Perform crash triage analysis
+		if a.triageEngine != nil {
+			triage := a.triageEngine.TriageCrash(crashInfo, result)
+
+			// Add triage information to crash metadata
+			if crashInfo.Metadata == nil {
+				crashInfo.Metadata = make(map[string]interface{})
+			}
+			crashInfo.Metadata["severity"] = triage.Severity.String()
+			crashInfo.Metadata["crash_type"] = string(triage.CrashType)
+			crashInfo.Metadata["exploitability"] = string(triage.Exploitability)
+			crashInfo.Metadata["confidence"] = triage.Confidence
+			crashInfo.Metadata["keywords"] = triage.Keywords
+			crashInfo.Metadata["stack_hash"] = triage.StackHash
+			crashInfo.Metadata["analysis_time"] = triage.AnalysisTime
+		}
+
 		return crashInfo, nil
 	}
+
 	return nil, nil
 }
 
@@ -322,3 +345,17 @@ func (a *CoverageAnalyzer) extractStackTrace(result *interfaces.ExecutionResult)
 
 // Reset resets the analyzer state (no-op for CoverageAnalyzer)
 func (a *CoverageAnalyzer) Reset() error { return nil }
+
+// MinimizeCrash reduces a crash to its minimal reproducing form
+func (a *CoverageAnalyzer) MinimizeCrash(testCase *interfaces.TestCase, result *interfaces.ExecutionResult) (*interfaces.TestCase, error) {
+	if a.triageEngine == nil {
+		return testCase, nil // Return original if no triage engine
+	}
+
+	return a.triageEngine.MinimizeCrash(testCase, result)
+}
+
+// GetTriageEngine returns the crash triage engine for advanced operations
+func (a *CoverageAnalyzer) GetTriageEngine() *CrashTriageEngine {
+	return a.triageEngine
+}

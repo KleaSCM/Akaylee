@@ -1,0 +1,115 @@
+{
+  "Format": "json",
+  "RootRule": "root",
+  "Rules": {
+    "root": {
+      "examples": [
+        {
+          "active": true,
+          "age": 25,
+          "email": "alice@example.com",
+          "name": "Alice"
+        },
+        {
+          "active": false,
+          "age": 30,
+          "department": "engineering",
+          "email": "bob@example.com",
+          "name": "Bob"
+        },
+        {
+          "active": true,
+          "age": 35,
+          "department": "sales",
+          "email": "charlie@example.com",
+          "name": "Charlie"
+        }
+      ],
+      "fields": {
+        "active": {
+          "enum": [
+            "false",
+            "true"
+          ],
+          "examples": [
+            true,
+            false
+          ],
+          "types": [
+            "bool"
+          ]
+        },
+        "age": {
+          "examples": [
+            25,
+            30,
+            35
+          ],
+          "max": 35,
+          "min": 25,
+          "types": [
+            "number"
+          ]
+        },
+        "department": {
+          "enum": [
+            "engineering",
+            "sales"
+          ],
+          "examples": [
+            "engineering",
+            "sales"
+          ],
+          "types": [
+            "string"
+          ]
+        },
+        "email": {
+          "enum": [
+            "alice@example.com",
+            "bob@example.com",
+            "charlie@example.com"
+          ],
+          "examples": [
+            "alice@example.com",
+            "bob@example.com",
+            "charlie@example.com"
+          ],
+          "types": [
+            "string"
+          ]
+        },
+        "name": {
+          "enum": [
+            "Alice",
+            "Bob",
+            "Charlie"
+          ],
+          "examples": [
+            "Alice",
+            "Bob",
+            "Charlie"
+          ],
+          "types": [
+            "string"
+          ]
+        }
+      },
+      "optional": [
+        "department"
+      ],
+      "required": [
+        "name",
+        "age",
+        "email",
+        "active"
+      ],
+      "types": [
+        "object"
+      ]
+    }
+  },
+  "Metadata": {
+    "samples": 3
+  }
+}
