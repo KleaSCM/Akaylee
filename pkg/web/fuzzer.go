@@ -2,7 +2,7 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: fuzzer.go
-Description: AdvancedWebFuzzer implementation. Provides full crawling, session handling, coverage tracking,
+Description: Provides full crawling, session handling, coverage tracking,
 parallelism, and stateful corpus management for production-level web application fuzzing.
 */
 

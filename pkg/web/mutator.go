@@ -63,7 +63,7 @@ func (m *AdvancedWebMutator) MutateInputs(inputs map[string]string) map[string]s
 		} else if strings.Contains(strings.ToLower(k), "pass") {
 			mutated[k] = "' OR '1'='1"
 		} else if strings.Contains(strings.ToLower(k), "url") || strings.Contains(strings.ToLower(k), "link") {
-			mutated[k] = "http://evil.com"
+			mutated[k] = "http://example.com"
 		} else {
 			mutated[k] = v + payloads[rand.Intn(len(payloads))]
 		}

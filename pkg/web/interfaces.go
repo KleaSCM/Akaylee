@@ -3,7 +3,7 @@ Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: interfaces.go
 Description: Core interfaces for web application fuzzing. Defines WebFuzzer, BrowserController,
-WebTarget, WebMutator, and WebAnalyzer for modular, production-level browser automation and web fuzzing.
+WebTarget, WebMutator, and WebAnalyzer for modular, browser automation and web fuzzing.
 */
 
 package web
