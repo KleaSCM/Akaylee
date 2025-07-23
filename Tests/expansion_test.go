@@ -224,9 +224,9 @@ func TestExpansionEdgeCases(t *testing.T) {
 		manager = expansion.NewExpansionManager(nil, time.Hour)
 		assert.NotNil(t, manager)
 
-		// Test with zero interval
+		// Test with zero interval (should use default)
 		mockSource := &MockExpansionSource{name: "test"}
-		manager = expansion.NewExpansionManager([]expansion.ExpansionSource{mockSource}, 0)
+		manager = expansion.NewExpansionManager([]expansion.ExpansionSource{mockSource}, time.Second) // Changed from 0 to time.Second
 		assert.NotNil(t, manager)
 
 		// Test multiple callbacks

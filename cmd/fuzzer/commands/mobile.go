@@ -47,7 +47,7 @@ var mobileCmd = &cobra.Command{
 	Use:   "mobile",
 	Short: "Fuzz mobile apps (Android/iOS) with device/emulator automation",
 	Long: `Fuzz mobile apps using real devices or emulators. Supports install, launch, intent/event mutation,
-crash monitoring, and reporting. Production-level pipeline for Android (ADB, Monkey, UIAutomator).`,
+crash monitoring, and reporting.  pipeline for Android (ADB, Monkey, UIAutomator).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

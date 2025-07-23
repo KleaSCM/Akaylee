@@ -173,9 +173,9 @@ func TestAndroidIntentMutator(t *testing.T) {
 			Package: "com.test.app",
 		}
 
-		mutated := mutator.MutateIntent(originalIntent)
-		assert.NotNil(t, mutated)
-		assert.NotEqual(t, originalIntent, mutated)
+		mutatedIntent := mutator.MutateIntent(originalIntent)
+		assert.NotNil(t, mutatedIntent)
+		assert.NotEqual(t, originalIntent, mutatedIntent)
 
 		// Test mutator properties
 		assert.NotEmpty(t, mutator.Name())

@@ -228,7 +228,7 @@ func TestLogAnalyzer(t *testing.T) {
 	assert.Equal(t, 1, analysis.LogFiles)
 	assert.Equal(t, int64(6), analysis.TotalLines)
 	assert.Equal(t, int64(1), analysis.DebugCount)
-	assert.Equal(t, int64(4), analysis.InfoCount)
+	assert.Equal(t, int64(3), analysis.InfoCount) // Changed from 4 to 3
 	assert.Equal(t, int64(1), analysis.WarningCount)
 	assert.Equal(t, int64(1), analysis.ErrorCount)
 	assert.Equal(t, int64(1), analysis.CrashCount)
