@@ -52,6 +52,15 @@ func (e *ProcessExecutor) Initialize(config *interfaces.FuzzerConfig) error {
 // Execute runs a test case and returns the execution result
 // Handles process creation, monitoring, and result collection
 func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.ExecutionResult, error) {
+	// Defensive nil check for executor and config
+	if e == nil || e.config == nil {
+		result := &interfaces.ExecutionResult{
+			TestCaseID: testCase.ID,
+			Status:     interfaces.StatusError,
+			Error:      []byte("executor or config is nil (Akaylee patch: check your CLI wiring, babe!)"),
+		}
+		return result, fmt.Errorf("executor or config is nil (Akaylee patch: check your CLI wiring, babe!)")
+	}
 	if strings.Contains(e.config.Target, "vulnscan") {
 		// Use HTTP POST to vulnscan server
 		port := os.Getenv("VULNSCAN_PORT")
