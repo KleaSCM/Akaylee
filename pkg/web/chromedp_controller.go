@@ -2,9 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: chromedp_controller.go
-Description: Production-level BrowserController implementation using chromedp. Provides
-headless Chrome automation for navigation, DOM interaction, JS execution, form filling,
-screenshots, and log collection. Designed for robust, modular web fuzzing.
+Description: BrowserController using chromedp. Implements real cookie/header management,
+console log and network event collection, and session/state helpers for robust web fuzzing.
 */
 
 package web
@@ -13,7 +12,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -26,10 +28,15 @@ type ChromeDPController struct {
 	cancel  context.CancelFunc
 	alloc   context.CancelFunc
 	logs    []string
+	netlogs []string
 	lastDOM string
+	headers map[string]string
+	cookies map[string]string
+	logMu   sync.Mutex
+	netMu   sync.Mutex
 }
 
-// Start launches the headless browser
+// Start launches the headless browser and attaches event listeners
 func (c *ChromeDPController) Start(ctx context.Context) error {
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
@@ -37,6 +44,43 @@ func (c *ChromeDPController) Start(ctx context.Context) error {
 	c.cancel = browserCancel
 	c.alloc = allocCancel
 	c.logs = []string{}
+	c.netlogs = []string{}
+	c.headers = make(map[string]string)
+	c.cookies = make(map[string]string)
+
+	// Attach event listeners for console, JS errors, and network
+	chromedp.ListenTarget(c.ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			c.netMu.Lock()
+			c.netlogs = append(c.netlogs, fmt.Sprintf("[REQ] %s %s", e.Request.Method, e.Request.URL))
+			c.netMu.Unlock()
+		case *network.EventResponseReceived:
+			c.netMu.Lock()
+			c.netlogs = append(c.netlogs, fmt.Sprintf("[RES] %d %s", e.Response.Status, e.Response.URL))
+			c.netMu.Unlock()
+		case *network.EventLoadingFailed:
+			c.netMu.Lock()
+			c.netlogs = append(c.netlogs, fmt.Sprintf("[ERR] %s %s", e.ErrorText, e.RequestID.String()))
+			c.netMu.Unlock()
+		case *runtime.EventConsoleAPICalled:
+			c.logMu.Lock()
+			for _, arg := range e.Args {
+				c.logs = append(c.logs, fmt.Sprintf("[console] %s", arg.Value))
+			}
+			c.logMu.Unlock()
+		case *runtime.EventExceptionThrown:
+			c.logMu.Lock()
+			c.logs = append(c.logs, fmt.Sprintf("[exception] %s", e.ExceptionDetails.Error()))
+			c.logMu.Unlock()
+		}
+	})
+
+	// Enable network and runtime events
+	if err := chromedp.Run(c.ctx, network.Enable(), runtime.Enable()); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -56,16 +100,29 @@ func (c *ChromeDPController) Navigate(url string) error {
 	return chromedp.Run(c.ctx, chromedp.Navigate(url))
 }
 
-// SetCookies sets browser cookies
+// SetCookies sets browser cookies using network.SetCookie
 func (c *ChromeDPController) SetCookies(cookies map[string]string) error {
-	// Not implemented: chromedp requires network.SetCookie for each cookie
+	for name, value := range cookies {
+		action := network.SetCookie(name, value).WithDomain("").WithPath("/")
+		if err := chromedp.Run(c.ctx, action); err != nil {
+			return err
+		}
+		c.cookies[name] = value
+	}
 	return nil
 }
 
-// SetHeaders sets custom headers
+// SetHeaders sets custom headers for all requests using network.SetExtraHTTPHeaders
 func (c *ChromeDPController) SetHeaders(headers map[string]string) error {
-	// Not implemented: chromedp requires network.SetExtraHTTPHeaders
-	return nil
+	if len(headers) == 0 {
+		return nil
+	}
+	hdrs := make(network.Headers)
+	for k, v := range headers {
+		hdrs[k] = v
+		c.headers[k] = v
+	}
+	return chromedp.Run(c.ctx, network.SetExtraHTTPHeaders(hdrs))
 }
 
 // ExecuteJS runs JavaScript in the page context
@@ -77,7 +134,6 @@ func (c *ChromeDPController) ExecuteJS(js string) (interface{}, error) {
 
 // FillForm fills a form given a selector and values
 func (c *ChromeDPController) FillForm(selector string, values map[string]string) error {
-	// For each input, set value via JS
 	for name, value := range values {
 		js := fmt.Sprintf(`document.querySelector('%s [name="%s"]').value = "%s";`, selector, name, value)
 		if err := chromedp.Run(c.ctx, chromedp.Evaluate(js, nil)); err != nil {
@@ -112,14 +168,30 @@ func (c *ChromeDPController) Screenshot(path string) error {
 
 // GetConsoleLogs returns collected JS console logs
 func (c *ChromeDPController) GetConsoleLogs() ([]string, error) {
-	// Not implemented: would require chromedp event listeners
-	return c.logs, nil
+	c.logMu.Lock()
+	defer c.logMu.Unlock()
+	logs := make([]string, len(c.logs))
+	copy(logs, c.logs)
+	return logs, nil
 }
 
 // GetNetworkLogs returns collected network logs
 func (c *ChromeDPController) GetNetworkLogs() ([]string, error) {
-	// Not implemented: would require chromedp event listeners
-	return []string{}, nil
+	c.netMu.Lock()
+	defer c.netMu.Unlock()
+	netlogs := make([]string, len(c.netlogs))
+	copy(netlogs, c.netlogs)
+	return netlogs, nil
+}
+
+// ClearCookies clears all browser cookies
+func (c *ChromeDPController) ClearCookies() error {
+	return chromedp.Run(c.ctx, network.ClearBrowserCookies())
+}
+
+// ClearCache clears browser cache
+func (c *ChromeDPController) ClearCache() error {
+	return chromedp.Run(c.ctx, network.ClearBrowserCache())
 }
 
 // Helper to write screenshot file
