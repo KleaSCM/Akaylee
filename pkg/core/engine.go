@@ -460,6 +460,9 @@ func (e *Engine) runWorker(worker *Worker) {
 
 			// Execute test case
 			result, err := worker.Execute(testCase)
+			// Increment executions immediately after execution
+			e.stats.IncrementExecutions()
+
 			if err != nil {
 				e.logger.Errorf("Worker %d failed to execute test case: %v", worker.ID, err)
 				continue
@@ -468,11 +471,8 @@ func (e *Engine) runWorker(worker *Worker) {
 			// Process result
 			e.processResult(result)
 
-			// Update statistics (atomic)
-			e.stats.IncrementExecutions()
-			totalExec := atomic.LoadInt64(&e.stats.Executions)
-
 			// Auto-stop after max executions (only one worker triggers)
+			totalExec := atomic.LoadInt64(&e.stats.Executions)
 			if e.config.MaxExecutions > 0 && totalExec >= e.config.MaxExecutions {
 				e.logger.Warnf("Max executions reached (%d), stopping engine...", e.config.MaxExecutions)
 				e.Stop()
@@ -896,8 +896,7 @@ func (e *Engine) writeReport() {
 	os.MkdirAll(reportDir, 0755)
 	reportBase := filepath.Join(reportDir, fmt.Sprintf("%s_%s", filepath.Base(e.config.Target), time.Now().Format("2006-01-02_15-04-05")))
 	if e.stats.Executions == 0 {
-		e.logger.Fatalf("[REPORT] PANIC: e.stats.Executions is ZERO at report time!")
-		panic("[REPORT] e.stats.Executions is ZERO at report time!")
+		e.logger.Warn("[REPORT] No executions occurred. Writing empty report.")
 	}
 	jsonReport := map[string]interface{}{
 		"target":              e.config.Target,

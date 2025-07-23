@@ -17,6 +17,9 @@ import (
 	"syscall"
 	"time"
 
+	"math/rand"
+	"strings"
+
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 )
 
@@ -64,6 +67,19 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 		Status:     interfaces.StatusSuccess,
 	}
 
+	// Pick a random port between 50000 and 60000
+	port := 50000 + rand.Intn(10000)
+	portStr := fmt.Sprintf("%d", port)
+
+	// Optionally rewrite testCase.Data to use the chosen port in URLs
+	// (Assume input is ASCII/UTF-8 text)
+	inputStr := string(testCase.Data)
+	inputStr = strings.ReplaceAll(inputStr, ":6969", ":"+portStr)
+	testCase.Data = []byte(inputStr)
+
+	// Log the chosen port for debugging
+	fmt.Printf("[EXECUTOR] Using VULNSCAN_PORT=%s for test case %s\n", portStr, testCase.ID)
+
 	// Build command: target <inputfile> (if file mode)
 	var cmd *exec.Cmd
 	if e == nil || e.config == nil {
@@ -94,8 +110,8 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 	stderrPipe, _ := cmd.StderrPipe()
 
 	// Set environment variables
-	// Set environment variables if specified (simplified for now)
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "VULNSCAN_PORT="+portStr)
 
 	// Set resource limits
 	e.setResourceLimits(cmd)
