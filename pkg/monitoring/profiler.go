@@ -275,6 +275,7 @@ func (p *Profiler) startMemoryProfile() error {
 		return fmt.Errorf("failed to create memory profile file: %w", err)
 	}
 
+	// Store file reference for later use
 	result := &ProfileResult{
 		Type:       ProfilerTypeMemory,
 		StartTime:  time.Now(),
@@ -282,6 +283,8 @@ func (p *Profiler) startMemoryProfile() error {
 		Metadata:   make(map[string]interface{}),
 	}
 
+	// Store file handle in metadata for proper cleanup
+	result.Metadata["file_handle"] = file
 	p.activeProfiles[ProfilerTypeMemory] = result
 	p.logger.Info("Memory profiling started")
 	return nil
@@ -296,6 +299,7 @@ func (p *Profiler) startGoroutineProfile() error {
 		return fmt.Errorf("failed to create goroutine profile file: %w", err)
 	}
 
+	// Store file reference for later use
 	result := &ProfileResult{
 		Type:       ProfilerTypeGoroutine,
 		StartTime:  time.Now(),
@@ -303,6 +307,8 @@ func (p *Profiler) startGoroutineProfile() error {
 		Metadata:   make(map[string]interface{}),
 	}
 
+	// Store file handle in metadata for proper cleanup
+	result.Metadata["file_handle"] = file
 	p.activeProfiles[ProfilerTypeGoroutine] = result
 	p.logger.Info("Goroutine profiling started")
 	return nil
@@ -319,6 +325,7 @@ func (p *Profiler) startBlockProfile() error {
 		return fmt.Errorf("failed to create block profile file: %w", err)
 	}
 
+	// Store file reference for later use
 	result := &ProfileResult{
 		Type:       ProfilerTypeBlock,
 		StartTime:  time.Now(),
@@ -326,6 +333,8 @@ func (p *Profiler) startBlockProfile() error {
 		Metadata:   make(map[string]interface{}),
 	}
 
+	// Store file handle in metadata for proper cleanup
+	result.Metadata["file_handle"] = file
 	p.activeProfiles[ProfilerTypeBlock] = result
 	p.logger.Info("Block profiling started")
 	return nil
@@ -342,6 +351,7 @@ func (p *Profiler) startMutexProfile() error {
 		return fmt.Errorf("failed to create mutex profile file: %w", err)
 	}
 
+	// Store file reference for later use
 	result := &ProfileResult{
 		Type:       ProfilerTypeMutex,
 		StartTime:  time.Now(),
@@ -349,6 +359,8 @@ func (p *Profiler) startMutexProfile() error {
 		Metadata:   make(map[string]interface{}),
 	}
 
+	// Store file handle in metadata for proper cleanup
+	result.Metadata["file_handle"] = file
 	p.activeProfiles[ProfilerTypeMutex] = result
 	p.logger.Info("Mutex profiling started")
 	return nil
