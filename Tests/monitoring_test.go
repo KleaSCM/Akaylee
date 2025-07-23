@@ -21,19 +21,17 @@ import (
 
 // TestMetricsCollector tests the metrics collector
 func TestMetricsCollector(t *testing.T) {
-	runTest(t, "TestMetricsCollector", func(t *testing.T) {
-		logger := logrus.New()
-		collector := monitoring.NewMetricsCollector(logger)
-		require.NotNil(t, collector)
+	logger := logrus.New()
+	collector := monitoring.NewMetricsCollector(logger)
+	require.NotNil(t, collector)
 
-		// Test basic functionality without starting
-		// Test getting metrics
-		metrics := collector.GetGlobalMetrics()
-		assert.NotNil(t, metrics)
+	// Test basic functionality without starting
+	// Test getting metrics
+	metrics := collector.GetGlobalMetrics()
+	assert.NotNil(t, metrics)
 
-		// Test that collector can be created and basic operations work
-		assert.NotNil(t, collector)
-	})
+	// Test that collector can be created and basic operations work
+	assert.NotNil(t, collector)
 }
 
 func TestNetworkMonitor(t *testing.T) {

@@ -19,6 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Universal runTest helper for compatibility after engine/CLI removal
+func runTest(t *testing.T, name string, fn func(t *testing.T)) {
+	t.Run(name, fn)
+}
+
 func TestCrashTriageEngineCreation(t *testing.T) {
 	runTest(t, "TestCrashTriageEngineCreation", func(t *testing.T) {
 		engine := analysis.NewCrashTriageEngine()

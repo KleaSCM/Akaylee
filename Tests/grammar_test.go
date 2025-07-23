@@ -24,7 +24,7 @@ import (
 
 // TestJSONGrammarGeneration tests basic JSON generation
 func TestJSONGrammarGeneration(t *testing.T) {
-	runTest(t, "TestJSONGrammarGeneration", func(t *testing.T) {
+	t.Run("TestJSONGrammarGeneration", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 
 		// Generate multiple JSON objects
@@ -58,7 +58,7 @@ func TestJSONGrammarGeneration(t *testing.T) {
 
 // TestJSONGrammarWithSeedKeys tests generation with seed keys
 func TestJSONGrammarWithSeedKeys(t *testing.T) {
-	runTest(t, "TestJSONGrammarWithSeedKeys", func(t *testing.T) {
+	t.Run("TestJSONGrammarWithSeedKeys", func(t *testing.T) {
 		seedKeys := []string{"name", "age", "email", "active"}
 		g := grammar.NewJSONGrammarWithSeeds(seedKeys)
 
@@ -92,7 +92,7 @@ func TestJSONGrammarWithSeedKeys(t *testing.T) {
 
 // TestJSONGrammarDeepFuzzing tests deep recursive generation
 func TestJSONGrammarDeepFuzzing(t *testing.T) {
-	runTest(t, "TestJSONGrammarDeepFuzzing", func(t *testing.T) {
+	t.Run("TestJSONGrammarDeepFuzzing", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		g.SetMaxDepth(3)
 
@@ -121,7 +121,7 @@ func TestJSONGrammarDeepFuzzing(t *testing.T) {
 
 // TestJSONGrammarMutationVariability tests enhanced mutation variability
 func TestJSONGrammarMutationVariability(t *testing.T) {
-	runTest(t, "TestJSONGrammarMutationVariability", func(t *testing.T) {
+	t.Run("TestJSONGrammarMutationVariability", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 
 		// Create test JSON with various types
@@ -158,7 +158,7 @@ func TestJSONGrammarMutationVariability(t *testing.T) {
 
 // TestJSONGrammarArrayMutation tests array mutation capabilities
 func TestJSONGrammarArrayMutation(t *testing.T) {
-	runTest(t, "TestJSONGrammarArrayMutation", func(t *testing.T) {
+	t.Run("TestJSONGrammarArrayMutation", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 
 		// Test array mutation
@@ -184,7 +184,7 @@ func TestJSONGrammarArrayMutation(t *testing.T) {
 
 // TestJSONGrammarObjectMutation tests object mutation capabilities
 func TestJSONGrammarObjectMutation(t *testing.T) {
-	runTest(t, "TestJSONGrammarObjectMutation", func(t *testing.T) {
+	t.Run("TestJSONGrammarObjectMutation", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 
 		// Test object mutation
@@ -210,7 +210,7 @@ func TestJSONGrammarObjectMutation(t *testing.T) {
 
 // TestJSONGrammarTypeConversion tests type conversion mutations
 func TestJSONGrammarTypeConversion(t *testing.T) {
-	runTest(t, "TestJSONGrammarTypeConversion", func(t *testing.T) {
+	t.Run("TestJSONGrammarTypeConversion", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 
 		// Test string to number conversion
@@ -240,7 +240,7 @@ func TestJSONGrammarTypeConversion(t *testing.T) {
 
 // TestGrammarMutatorWithConfig tests the enhanced grammar mutator
 func TestGrammarMutatorWithConfig(t *testing.T) {
-	runTest(t, "TestGrammarMutatorWithConfig", func(t *testing.T) {
+	t.Run("TestGrammarMutatorWithConfig", func(t *testing.T) {
 		seedKeys := []string{"id", "name", "status"}
 		maxDepth := 4
 
@@ -275,7 +275,7 @@ func TestGrammarMutatorWithConfig(t *testing.T) {
 
 // TestGrammarMutatorSeedKeys tests seed key functionality
 func TestGrammarMutatorSeedKeys(t *testing.T) {
-	runTest(t, "TestGrammarMutatorSeedKeys", func(t *testing.T) {
+	t.Run("TestGrammarMutatorSeedKeys", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
@@ -308,7 +308,7 @@ func TestGrammarMutatorSeedKeys(t *testing.T) {
 
 // TestGrammarMutatorMaxDepth tests max depth functionality
 func TestGrammarMutatorMaxDepth(t *testing.T) {
-	runTest(t, "TestGrammarMutatorMaxDepth", func(t *testing.T) {
+	t.Run("TestGrammarMutatorMaxDepth", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
@@ -339,7 +339,7 @@ func TestGrammarMutatorMaxDepth(t *testing.T) {
 
 // TestGrammarMutatorEmptyData tests mutation with empty data
 func TestGrammarMutatorEmptyData(t *testing.T) {
-	runTest(t, "TestGrammarMutatorEmptyData", func(t *testing.T) {
+	t.Run("TestGrammarMutatorEmptyData", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
@@ -365,7 +365,7 @@ func TestGrammarMutatorEmptyData(t *testing.T) {
 
 // TestGrammarMutatorInvalidJSON tests mutation with invalid JSON
 func TestGrammarMutatorInvalidJSON(t *testing.T) {
-	runTest(t, "TestGrammarMutatorInvalidJSON", func(t *testing.T) {
+	t.Run("TestGrammarMutatorInvalidJSON", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
@@ -391,7 +391,7 @@ func TestGrammarMutatorInvalidJSON(t *testing.T) {
 
 // TestGrammarMutatorDescription tests description generation
 func TestGrammarMutatorDescription(t *testing.T) {
-	runTest(t, "TestGrammarMutatorDescription", func(t *testing.T) {
+	t.Run("TestGrammarMutatorDescription", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
@@ -413,7 +413,7 @@ func TestGrammarMutatorDescription(t *testing.T) {
 
 // TestGrammarMutatorInit tests initialization
 func TestGrammarMutatorInit(t *testing.T) {
-	runTest(t, "TestGrammarMutatorInit", func(t *testing.T) {
+	t.Run("TestGrammarMutatorInit", func(t *testing.T) {
 		g := grammar.NewJSONGrammar()
 		mutator := strategies.NewGrammarMutator(g)
 
