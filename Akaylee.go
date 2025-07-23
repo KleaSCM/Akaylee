@@ -208,7 +208,7 @@ func main() {
 	if err := engine.Start(); err != nil {
 		panic(err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	fmt.Println("[Akaylee] Stopping modular engine...")
 	if err := engine.Stop(); err != nil {
 		panic(err)
