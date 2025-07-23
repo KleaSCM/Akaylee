@@ -2,7 +2,9 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: metrics_writer.go
-Description: Utility for writing test results to the metrics directory. Handles timestamped, versioned, and type-specific subdirectory naming. Ensures directories exist and writes JSON files for easy analysis.
+Description: Utility for writing test results to the metrics directory.
+Handles timestamped, versioned, and type-specific subdirectory naming.
+Ensures directories exist and writes JSON files for easy analysis.
 */
 
 package utils

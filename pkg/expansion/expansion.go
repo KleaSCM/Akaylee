@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: expansion.go
 Description: Core logic for seed corpus auto-expansion. Defines the ExpansionSource interface,
 connectors for real-world data, and the ExpansionManager for orchestrating expansion events.
-Provides production-level, extensible architecture for integrating new data sources.
+Provides , extensible architecture for integrating new data sources.
 */
 
 package expansion

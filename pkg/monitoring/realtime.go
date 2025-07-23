@@ -258,7 +258,7 @@ func (rtm *RealTimeMonitor) getRealTimeMetrics() *RealTimeMetrics {
 	return metrics
 }
 
-// getCPUUsage gets current CPU usage with production-level implementation
+// getCPUUsage gets current CPU usage
 func (rtm *RealTimeMonitor) getCPUUsage() float64 {
 	// Read /proc/stat for CPU statistics
 	data, err := os.ReadFile("/proc/stat")
@@ -300,7 +300,7 @@ func (rtm *RealTimeMonitor) getCPUUsage() float64 {
 	return 0.0
 }
 
-// getMemoryUsage gets current memory usage with production-level implementation
+// getMemoryUsage gets current memory usage
 func (rtm *RealTimeMonitor) getMemoryUsage() uint64 {
 	// Read /proc/meminfo for memory statistics
 	data, err := os.ReadFile("/proc/meminfo")
@@ -339,7 +339,7 @@ func (rtm *RealTimeMonitor) getMemoryUsage() uint64 {
 	return 0
 }
 
-// getNetworkBytes gets current network usage with production-level implementation
+// getNetworkBytes gets current network usage
 func (rtm *RealTimeMonitor) getNetworkBytes() uint64 {
 	// Read /proc/net/dev for network statistics
 	data, err := os.ReadFile("/proc/net/dev")
@@ -374,7 +374,7 @@ func (rtm *RealTimeMonitor) getNetworkBytes() uint64 {
 	return totalBytes
 }
 
-// getDiskIO gets current disk I/O with production-level implementation
+// getDiskIO gets current disk I/O
 func (rtm *RealTimeMonitor) getDiskIO() uint64 {
 	// Read /proc/diskstats for disk I/O statistics
 	data, err := os.ReadFile("/proc/diskstats")
@@ -404,7 +404,7 @@ func (rtm *RealTimeMonitor) getDiskIO() uint64 {
 	return totalIO
 }
 
-// getLoadAverage gets system load average with production-level implementation
+// getLoadAverage gets system load average
 func (rtm *RealTimeMonitor) getLoadAverage() float64 {
 	// Read /proc/loadavg for load average
 	data, err := os.ReadFile("/proc/loadavg")
@@ -423,7 +423,7 @@ func (rtm *RealTimeMonitor) getLoadAverage() float64 {
 	return 0.0
 }
 
-// getProcessCount gets current process count with production-level implementation
+// getProcessCount gets current process count
 func (rtm *RealTimeMonitor) getProcessCount() int {
 	// Count entries in /proc directory
 	entries, err := os.ReadDir("/proc")
@@ -445,7 +445,7 @@ func (rtm *RealTimeMonitor) getProcessCount() int {
 	return count
 }
 
-// getThreadCount gets current thread count with production-level implementation
+// getThreadCount gets current thread count
 func (rtm *RealTimeMonitor) getThreadCount() int {
 	// Count threads by reading /proc/stat
 	data, err := os.ReadFile("/proc/stat")
@@ -472,7 +472,7 @@ func (rtm *RealTimeMonitor) getThreadCount() int {
 	return 0
 }
 
-// getContextSwitches gets context switch count with production-level implementation
+// getContextSwitches gets context switch count
 func (rtm *RealTimeMonitor) getContextSwitches() uint64 {
 	// Read /proc/stat for context switches
 	data, err := os.ReadFile("/proc/stat")
@@ -497,7 +497,7 @@ func (rtm *RealTimeMonitor) getContextSwitches() uint64 {
 	return 0
 }
 
-// getInterrupts gets interrupt count with production-level implementation
+// getInterrupts gets interrupt count
 func (rtm *RealTimeMonitor) getInterrupts() uint64 {
 	// Read /proc/stat for interrupts
 	data, err := os.ReadFile("/proc/stat")
@@ -522,7 +522,7 @@ func (rtm *RealTimeMonitor) getInterrupts() uint64 {
 	return 0
 }
 
-// getUptime gets system uptime with production-level implementation
+// getUptime gets system uptime
 func (rtm *RealTimeMonitor) getUptime() time.Duration {
 	// Read /proc/uptime for system uptime
 	data, err := os.ReadFile("/proc/uptime")

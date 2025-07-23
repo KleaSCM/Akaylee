@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Akaylee Fuzzer is designed as a high-performance, production-level fuzzing engine with a modular architecture that prioritizes speed, scalability, and extensibility. This document describes the architectural decisions, component design, and performance considerations that make the fuzzer both powerful and maintainable.
+The Akaylee Fuzzer is designed as a high-performance,  fuzzing engine with a modular architecture that prioritizes speed, scalability, and extensibility. This document describes the architectural decisions, component design, and performance considerations that make the fuzzer both powerful and maintainable.
 
 ## Core Design Principles
 

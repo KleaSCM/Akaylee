@@ -2,7 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: grammar_mutator.go
-Description: GrammarMutator for structure-aware fuzzing in the Akaylee Fuzzer. Uses a Grammar to generate and mutate valid inputs with advanced configuration options. Implements interfaces.Mutator.
+Description: GrammarMutator for structure-aware fuzzing in the Akaylee Fuzzer.
+Uses a Grammar to generate and mutate valid inputs with advanced configuration options. Implements interfaces.Mutator.
 */
 
 package strategies

@@ -2,7 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: grammar.go
-Description: Grammar interface and JSONGrammar implementation for grammar-based fuzzing in the Akaylee Fuzzer. Enables structure-aware input generation and mutation with advanced variability and deep fuzzing capabilities.
+Description: Grammar interface and JSONGrammar implementation for grammar-based fuzzing in the Akaylee Fuzzer.
+ Enables structure-aware input generation and mutation with advanced variability and deep fuzzing capabilities.
 */
 
 package grammar

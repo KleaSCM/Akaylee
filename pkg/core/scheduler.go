@@ -2,7 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: scheduler.go
-Description: Scheduler interface and implementations for pluggable test case scheduling in the Akaylee Fuzzer. Includes PriorityScheduler and a stub for CoverageGuidedScheduler.
+Description: Scheduler interface and implementations for pluggable test case scheduling in the Akaylee Fuzzer.
+Includes PriorityScheduler and a stub for CoverageGuidedScheduler.
 */
 
 package core

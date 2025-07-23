@@ -2,7 +2,7 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: event_mutator.go
-Description: Production-level AndroidEventMutator. Implements EventMutator interface for generating
+Description:  AndroidEventMutator. Implements EventMutator interface for generating
 and mutating Android UI events (tap, swipe, input) with real selectors and values. Provides diverse,
 context-aware event mutations for comprehensive fuzzing.
 */

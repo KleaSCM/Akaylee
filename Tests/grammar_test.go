@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: grammar_test.go
 Description: Comprehensive tests for the enhanced grammar features including seed keys,
 deep fuzzing, advanced mutation variability, and array/object support. Tests the
-production-level grammar implementation with proper validation and edge case handling.
+ grammar implementation with proper validation and edge case handling.
 */
 
 package core_test

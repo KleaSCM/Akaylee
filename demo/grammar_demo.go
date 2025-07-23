@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: grammar_demo.go
 Description: Beautiful demo showcasing the enhanced grammar features including
 seed keys, deep fuzzing, advanced mutation variability, and array/object support.
-Demonstrates the production-level grammar implementation with real examples.
+Demonstrates the  grammar implementation with real examples.
 */
 
 package main

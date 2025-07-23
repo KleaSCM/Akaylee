@@ -2,8 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: composite.go
-Description: Composite mutator for the Akaylee Fuzzer. Allows chaining and composition of multiple mutation strategies for maximum test case diversity.
-Supports both sequential and random chaining of mutators.
+Description: Composite mutator for the Akaylee Fuzzer. Allows chaining and composition of multiple mutation strategies
+for maximum test case diversity. Supports both sequential and random chaining of mutators.
 */
 
 package strategies

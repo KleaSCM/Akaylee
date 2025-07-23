@@ -1,0 +1,8 @@
+Crash Report for com.test.app
+Timestamp: 2025-07-23 05:34:16.379851361 +0000 UTC m=+1.427457804
+Type: crash
+Message: Test crash
+StackTrace:
+Test stack trace
+Logs:
+Test log

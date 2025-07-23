@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: webapi_source.go
 Description: ExpansionSource implementation for web API endpoints. Supports GET/POST,
 JSON/CSV/TXT, authentication, and deduplication. Provides robust error handling and
-production-level comments for extensibility.
+ comments for extensibility.
 */
 
 package expansion

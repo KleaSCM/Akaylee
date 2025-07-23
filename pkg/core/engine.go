@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: engine.go
 Description: Main fuzzer engine implementation. Provides the core fuzzing logic with advanced
 scheduling algorithms, worker pool management, and intelligent test case prioritization.
-Implements the FuzzerEngine interface with production-level performance optimizations.
+Implements the FuzzerEngine interface with  performance optimizations.
 */
 
 package core

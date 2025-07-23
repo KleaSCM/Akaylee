@@ -4,7 +4,7 @@ Email: KleaSCM@gmail.com
 File: executor.go
 Description: Process executor implementation for the Akaylee Fuzzer. Provides comprehensive
 process management, resource limits, and crash detection for target program execution.
-Handles process creation, monitoring, and cleanup with production-level reliability.
+Handles process creation, monitoring, and cleanup with  reliability.
 */
 
 package execution

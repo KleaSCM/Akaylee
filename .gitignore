@@ -53,3 +53,6 @@ dist/
 # Temporary files
 tmp/
 temp/ 
+
+#ignore TARGET
+TARGET/

@@ -3,7 +3,7 @@ Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: interfaces.go
 Description: Core interfaces for mobile app fuzzing. Defines MobileFuzzer, DeviceController,
-AppAnalyzer, IntentMutator, EventMutator, and CrashReporter for modular, production-level
+AppAnalyzer, IntentMutator, EventMutator, and CrashReporter for modular,
 Android/iOS fuzzing and automation.
 */
 

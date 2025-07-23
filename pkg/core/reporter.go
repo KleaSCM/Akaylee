@@ -2,7 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: reporter.go
-Description: Reporter interface and implementations for Akaylee Fuzzer telemetry and live reporting. Supports logging, Prometheus, and future integrations for real-time fuzzing metrics and events.
+Description: Reporter interface and implementations for Akaylee Fuzzer telemetry and live reporting.
+ Supports logging, Prometheus, and future integrations for real-time fuzzing metrics and events.
 */
 
 package core
