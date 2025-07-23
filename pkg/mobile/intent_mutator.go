@@ -2,7 +2,7 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: intent_mutator.go
-Description: Production-level AndroidIntentMutator. Implements IntentMutator interface for generating
+Description: AndroidIntentMutator. Implements IntentMutator interface for generating
 and mutating Android intents with real actions, data URIs, and extras. Provides diverse, context-aware
 intent mutations for comprehensive fuzzing.
 */

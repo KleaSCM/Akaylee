@@ -2,7 +2,7 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: app_analyzer.go
-Description: Production-level AndroidAppAnalyzer. Implements AppAnalyzer interface for APK/manifest
+Description: AndroidAppAnalyzer. Implements AppAnalyzer interface for APK/manifest
 analysis and runtime inspection using aapt, dumpsys, ps, and logcat. Robust output parsing and error handling.
 */
 

@@ -390,6 +390,7 @@ visualizations. Perfect for sharing results and monitoring fuzzing progress.`,
 
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
+	rootCmd.AddCommand(commands.MobileCmd)
 
 	// Execute root command
 	if err := rootCmd.Execute(); err != nil {

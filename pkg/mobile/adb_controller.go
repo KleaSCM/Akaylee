@@ -2,8 +2,8 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: adb_controller.go
-Description: Production-level AndroidDeviceController using ADB and emulator automation. Implements
-all DeviceController methods for real device and emulator management, including app install/uninstall,
+Description: AndroidDeviceController using ADB and emulator automation. Implements
+all DeviceController methods for device and emulator management, including app install/uninstall,
 launch/stop, intent/event injection, screenshot, log collection, and device info. Robust error handling
 and output parsing for reliable automation.
 */
