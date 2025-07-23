@@ -234,6 +234,35 @@ func (m *APIMutator) GenerateAuthBypassPayloads() []string {
 	return m.payloadGenerator.authBypassPayloads
 }
 
+// Mutate implements the interfaces.Mutator interface for APIMutator
+func (m *APIMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase, error) {
+	// Try to parse the test case data as an APIRequest
+	var req interfaces.APIRequest
+	err := json.Unmarshal(testCase.Data, &req)
+	if err != nil {
+		// If not valid JSON, just mutate the raw data
+		return testCase, nil
+	}
+	mutatedReq, err := m.MutateAPIRequest(&req)
+	if err != nil {
+		return testCase, err
+	}
+	mutatedData, err := json.Marshal(mutatedReq)
+	if err != nil {
+		return testCase, err
+	}
+	mutated := &interfaces.TestCase{
+		ID:         testCase.ID + "_api_mutated",
+		Data:       mutatedData,
+		ParentID:   testCase.ID,
+		Generation: testCase.Generation + 1,
+		CreatedAt:  time.Now(),
+		Priority:   testCase.Priority,
+		Metadata:   map[string]interface{}{"mutator": m.Name()},
+	}
+	return mutated, nil
+}
+
 // Helper methods for specific mutations
 
 func (m *APIMutator) mutateHeaders(request *interfaces.APIRequest) {

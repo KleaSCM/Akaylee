@@ -1,0 +1,24 @@
+{
+  "targets": [
+    {
+      "id": "astarte_chat",
+      "name": "Astarte /chat API",
+      "type": "http",
+      "url": "http://localhost:8080/chat",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": "{\"message\":\"hi there!\",\"userId\":\"testuser\"}",
+      "timeout": 5000
+    }
+  ],
+  "concurrent_requests": 4,
+  "request_timeout": 5000,
+  "follow_redirects": false,
+  "verify_ssl": false,
+  "user_agent": "AkayleeFuzzer/1.0",
+  "corpus_dir": "./corpus",
+  "output_dir": "./fuzz_output",
+  "workers": 4
+} 
