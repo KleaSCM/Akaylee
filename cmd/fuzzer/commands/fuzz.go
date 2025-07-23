@@ -30,6 +30,7 @@ import (
 	"github.com/kleascm/akaylee-fuzzer/pkg/grammar"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
+	"github.com/kleascm/akaylee-fuzzer/pkg/web"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -104,6 +105,33 @@ func RunFuzz(cmd *cobra.Command, args []string) error {
 			}
 		})
 		expMgr.Start()
+	}
+
+	// --- Web Fuzzing Integration ---
+	webTargetURL := viper.GetString("web.target")
+	if webTargetURL != "" {
+		fmt.Println("[webfuzz] Web application fuzzing enabled!")
+		// Parse web config
+		target := &web.WebTarget{
+			URL:         webTargetURL,
+			Scope:       viper.GetStringSlice("web.scope"),
+			AuthType:    viper.GetString("web.auth"),
+			AuthConfig:  parseKeyValueSlice(viper.GetStringSlice("web.auth_config")),
+			Cookies:     parseKeyValueSlice(viper.GetStringSlice("web.cookies")),
+			Headers:     parseKeyValueSlice(viper.GetStringSlice("web.headers")),
+			LoginScript: viper.GetString("web.login_script"),
+			StartPage:   webTargetURL,
+		}
+		controller := &web.ChromeDPController{}
+		wordlist := loadWordlist(viper.GetString("web.wordlist"))
+		mutator := web.NewAdvancedWebMutator(wordlist)
+		analyzer := web.NewAdvancedWebAnalyzer()
+		fuzzer := web.NewAdvancedWebFuzzer()
+		fuzzer.Configure(target, controller, mutator, analyzer)
+		fuzzer.MaxContexts = viper.GetInt("web.parallel")
+		// Start web fuzzer in background
+		go fuzzer.Start(context.Background())
+		fmt.Println("[webfuzz] AdvancedWebFuzzer started for:", webTargetURL)
 	}
 
 	// Set up components
@@ -683,4 +711,36 @@ func validateNetwork() string {
 	conn.Close()
 
 	return ""
+}
+
+// --- Helper functions ---
+func parseKeyValueSlice(kvs []string) map[string]string {
+	m := make(map[string]string)
+	for _, kv := range kvs {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) == 2 {
+			m[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return m
+}
+
+func loadWordlist(path string) []string {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Printf("[webfuzz] Failed to load wordlist: %v\n", err)
+		return nil
+	}
+	lines := strings.Split(string(data), "\n")
+	var words []string
+	for _, line := range lines {
+		w := strings.TrimSpace(line)
+		if w != "" {
+			words = append(words, w)
+		}
+	}
+	return words
 }

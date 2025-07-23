@@ -115,6 +115,19 @@ cases in target applications with exceptional efficiency.`,
 	rootCmd.PersistentFlags().StringSlice("expansion-api-bodies", []string{}, "API POST bodies (optional)")
 	rootCmd.PersistentFlags().String("expansion-timeout", "10s", "Timeout for expansion requests")
 
+	// Add web fuzzing flags
+	rootCmd.PersistentFlags().String("web-target", "", "Web application target URL")
+	rootCmd.PersistentFlags().StringSlice("web-scope", []string{}, "Web fuzzing scope (domains/paths)")
+	rootCmd.PersistentFlags().String("web-auth", "", "Web authentication type (basic, form, oauth)")
+	rootCmd.PersistentFlags().StringSlice("web-auth-config", []string{}, "Web authentication config (key=value)")
+	rootCmd.PersistentFlags().StringSlice("web-cookies", []string{}, "Web cookies (key=value)")
+	rootCmd.PersistentFlags().StringSlice("web-headers", []string{}, "Web headers (key=value)")
+	rootCmd.PersistentFlags().String("web-login-script", "", "Web login JavaScript (for custom login flows)")
+	rootCmd.PersistentFlags().String("web-browser", "chrome", "Browser to use (chrome, firefox)")
+	rootCmd.PersistentFlags().Bool("web-headless", true, "Run browser in headless mode")
+	rootCmd.PersistentFlags().Int("web-parallel", 2, "Number of parallel browser contexts")
+	rootCmd.PersistentFlags().String("web-wordlist", "", "Path to wordlist for web input mutation")
+
 	// Bind flags to viper
 	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
 	viper.BindPFlag("json_logs", rootCmd.PersistentFlags().Lookup("json-logs"))
@@ -134,6 +147,17 @@ cases in target applications with exceptional efficiency.`,
 	viper.BindPFlag("expansion.api_headers", rootCmd.PersistentFlags().Lookup("expansion-api-headers"))
 	viper.BindPFlag("expansion.api_bodies", rootCmd.PersistentFlags().Lookup("expansion-api-bodies"))
 	viper.BindPFlag("expansion.timeout", rootCmd.PersistentFlags().Lookup("expansion-timeout"))
+	viper.BindPFlag("web.target", rootCmd.PersistentFlags().Lookup("web-target"))
+	viper.BindPFlag("web.scope", rootCmd.PersistentFlags().Lookup("web-scope"))
+	viper.BindPFlag("web.auth", rootCmd.PersistentFlags().Lookup("web-auth"))
+	viper.BindPFlag("web.auth_config", rootCmd.PersistentFlags().Lookup("web-auth-config"))
+	viper.BindPFlag("web.cookies", rootCmd.PersistentFlags().Lookup("web-cookies"))
+	viper.BindPFlag("web.headers", rootCmd.PersistentFlags().Lookup("web-headers"))
+	viper.BindPFlag("web.login_script", rootCmd.PersistentFlags().Lookup("web-login-script"))
+	viper.BindPFlag("web.browser", rootCmd.PersistentFlags().Lookup("web-browser"))
+	viper.BindPFlag("web.headless", rootCmd.PersistentFlags().Lookup("web-headless"))
+	viper.BindPFlag("web.parallel", rootCmd.PersistentFlags().Lookup("web-parallel"))
+	viper.BindPFlag("web.wordlist", rootCmd.PersistentFlags().Lookup("web-wordlist"))
 
 	// Add fuzz command
 	fuzzCmd := &cobra.Command{
