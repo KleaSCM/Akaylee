@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -513,12 +514,16 @@ func (nm *NetworkMonitor) addAlert(alert *NetworkAlert) {
 	nm.logger.Warnf("Network alert: %s - %s", alert.Type, alert.Message)
 }
 
-// updateConnections updates active network connections
+// updateConnections updates active network connections using /proc/net/tcp and /proc/net/udp
 func (nm *NetworkMonitor) updateConnections() {
-	// This is a simplified implementation
-	// In production, would read from /proc/net/tcp, /proc/net/udp, etc.
+	// Clear existing connections
+	nm.connections = make(map[string]*NetworkConnection)
 
-	// For now, just count active connections
+	// Track connections by protocol
+	nm.updateTCPConnections()
+	nm.updateUDPConnections()
+
+	// Count active connections
 	activeCount := 0
 	for _, conn := range nm.connections {
 		if time.Since(conn.LastActivity) < 5*time.Minute {
@@ -532,14 +537,206 @@ func (nm *NetworkMonitor) updateConnections() {
 	}
 }
 
-// updateLatency updates network latency measurements
-func (nm *NetworkMonitor) updateLatency() {
-	// This is a simplified implementation
-	// In production, would perform actual latency measurements
+// updateTCPConnections reads TCP connections from /proc/net/tcp
+func (nm *NetworkMonitor) updateTCPConnections() {
+	data, err := os.ReadFile("/proc/net/tcp")
+	if err != nil {
+		nm.logger.Debugf("Failed to read /proc/net/tcp: %v", err)
+		return
+	}
 
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if i == 0 { // Skip header
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 15 {
+			continue
+		}
+
+		conn := nm.parseConnection(fields, "tcp")
+		if conn != nil {
+			connID := fmt.Sprintf("%s-%s-%s", conn.Protocol, conn.LocalAddr, conn.RemoteAddr)
+			nm.connections[connID] = conn
+		}
+	}
+}
+
+// updateUDPConnections reads UDP connections from /proc/net/udp
+func (nm *NetworkMonitor) updateUDPConnections() {
+	data, err := os.ReadFile("/proc/net/udp")
+	if err != nil {
+		nm.logger.Debugf("Failed to read /proc/net/udp: %v", err)
+		return
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if i == 0 { // Skip header
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 15 {
+			continue
+		}
+
+		conn := nm.parseConnection(fields, "udp")
+		if conn != nil {
+			connID := fmt.Sprintf("%s-%s-%s", conn.Protocol, conn.LocalAddr, conn.RemoteAddr)
+			nm.connections[connID] = conn
+		}
+	}
+}
+
+// parseConnection parses a connection line from /proc/net/tcp or /proc/net/udp
+func (nm *NetworkMonitor) parseConnection(fields []string, protocol string) *NetworkConnection {
+	// Parse local address
+	localAddr := nm.parseHexAddress(fields[1])
+	if localAddr == "" {
+		return nil
+	}
+
+	// Parse remote address
+	remoteAddr := nm.parseHexAddress(fields[2])
+	if remoteAddr == "" {
+		return nil
+	}
+
+	// Parse state
+	state := nm.parseConnectionState(fields[3], protocol)
+
+	// Parse PID and program name
+	pid := 0
+	program := ""
+	if len(fields) >= 10 {
+		if pidStr := strings.TrimSpace(fields[9]); pidStr != "-" {
+			if p, err := strconv.Atoi(pidStr); err == nil {
+				pid = p
+				program = nm.getProgramName(pid)
+			}
+		}
+	}
+
+	// Parse bytes sent/received
+	bytesSent := uint64(0)
+	bytesReceived := uint64(0)
+	if len(fields) >= 8 {
+		if sent, err := strconv.ParseUint(fields[7], 16, 64); err == nil {
+			bytesSent = sent
+		}
+		if received, err := strconv.ParseUint(fields[8], 16, 64); err == nil {
+			bytesReceived = received
+		}
+	}
+
+	return &NetworkConnection{
+		LocalAddr:     localAddr,
+		RemoteAddr:    remoteAddr,
+		Protocol:      protocol,
+		State:         state,
+		PID:           pid,
+		Program:       program,
+		BytesSent:     bytesSent,
+		BytesReceived: bytesReceived,
+		StartTime:     time.Now(), // Approximate
+		LastActivity:  time.Now(),
+	}
+}
+
+// parseHexAddress converts hex address from /proc/net to string
+func (nm *NetworkMonitor) parseHexAddress(hexAddr string) string {
+	parts := strings.Split(hexAddr, ":")
+	if len(parts) != 2 {
+		return ""
+	}
+
+	// Parse IP address (little-endian hex)
+	ipHex := parts[0]
+	if len(ipHex) != 8 {
+		return ""
+	}
+
+	// Convert hex to bytes (little-endian)
+	var ipBytes []byte
+	for i := 6; i >= 0; i -= 2 {
+		if b, err := strconv.ParseUint(ipHex[i:i+2], 16, 8); err == nil {
+			ipBytes = append(ipBytes, byte(b))
+		}
+	}
+
+	// Parse port
+	portHex := parts[1]
+	if port, err := strconv.ParseUint(portHex, 16, 16); err == nil {
+		return fmt.Sprintf("%s:%d", net.IP(ipBytes).String(), port)
+	}
+
+	return ""
+}
+
+// parseConnectionState converts hex state to string
+func (nm *NetworkMonitor) parseConnectionState(hexState string, protocol string) string {
+	state, err := strconv.ParseUint(hexState, 16, 32)
+	if err != nil {
+		return "unknown"
+	}
+
+	if protocol == "tcp" {
+		switch state {
+		case 1:
+			return "ESTABLISHED"
+		case 2:
+			return "SYN_SENT"
+		case 3:
+			return "SYN_RECV"
+		case 4:
+			return "FIN_WAIT1"
+		case 5:
+			return "FIN_WAIT2"
+		case 6:
+			return "TIME_WAIT"
+		case 7:
+			return "CLOSE"
+		case 8:
+			return "CLOSE_WAIT"
+		case 9:
+			return "LAST_ACK"
+		case 10:
+			return "LISTEN"
+		case 11:
+			return "CLOSING"
+		default:
+			return "UNKNOWN"
+		}
+	}
+
+	return "ACTIVE" // For UDP
+}
+
+// getProgramName gets the program name for a PID
+func (nm *NetworkMonitor) getProgramName(pid int) string {
+	exePath := fmt.Sprintf("/proc/%d/exe", pid)
+	if target, err := os.Readlink(exePath); err == nil {
+		parts := strings.Split(target, "/")
+		if len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+	}
+	return "unknown"
+}
+
+// updateLatency updates network latency measurements using ping and traceroute
+func (nm *NetworkMonitor) updateLatency() {
 	for interfaceName := range nm.interfaces {
-		// Simulate latency measurement
-		latency := time.Duration(10+time.Now().UnixNano()%50) * time.Millisecond
+		// Skip loopback interface
+		if interfaceName == "lo" {
+			continue
+		}
+
+		// Measure latency using ping to a reliable host
+		latency := nm.measureLatency(interfaceName)
 
 		if metrics, exists := nm.lastMetrics[interfaceName]; exists {
 			metrics.Latency = latency
@@ -556,6 +753,50 @@ func (nm *NetworkMonitor) updateLatency() {
 			}
 		}
 	}
+}
+
+// measureLatency measures network latency using ping
+func (nm *NetworkMonitor) measureLatency(interfaceName string) time.Duration {
+	// Use different targets based on interface
+	var target string
+	switch {
+	case strings.HasPrefix(interfaceName, "eth") || strings.HasPrefix(interfaceName, "en"):
+		target = "8.8.8.8" // Google DNS
+	case strings.HasPrefix(interfaceName, "wlan") || strings.HasPrefix(interfaceName, "wl"):
+		target = "1.1.1.1" // Cloudflare DNS
+	default:
+		target = "127.0.0.1" // Localhost for loopback
+	}
+
+	// Execute ping command
+	cmd := exec.Command("ping", "-c", "1", "-W", "1", target)
+	output, err := cmd.Output()
+	if err != nil {
+		nm.logger.Debugf("Failed to ping %s: %v", target, err)
+		return 0
+	}
+
+	// Parse ping output for time
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "time=") {
+			// Extract time value (e.g., "time=12.345 ms")
+			timeIndex := strings.Index(line, "time=")
+			if timeIndex != -1 {
+				timePart := line[timeIndex+5:] // Skip "time="
+				spaceIndex := strings.Index(timePart, " ")
+				if spaceIndex != -1 {
+					timeStr := timePart[:spaceIndex]
+					if timeMs, err := strconv.ParseFloat(timeStr, 64); err == nil {
+						return time.Duration(timeMs * float64(time.Millisecond))
+					}
+				}
+			}
+		}
+	}
+
+	return 0
 }
 
 // calculateJitter calculates network jitter

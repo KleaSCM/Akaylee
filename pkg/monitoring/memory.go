@@ -445,53 +445,397 @@ func (d *CyclicLeakDetector) Detect(snapshots []*MemorySnapshot) (*MemoryLeakAle
 		return nil, fmt.Errorf("insufficient data for cyclic leak detection")
 	}
 
-	// Look for cyclic patterns in memory usage
-	// This is a simplified implementation
-	// In production, would use more sophisticated pattern recognition
+	// Extract memory usage values for analysis
+	var values []uint64
+	var timestamps []time.Time
+	for _, snapshot := range snapshots {
+		values = append(values, snapshot.HeapAlloc)
+		timestamps = append(timestamps, snapshot.Timestamp)
+	}
 
-	var peaks []uint64
-	for i := 1; i < len(snapshots)-1; i++ {
-		prev := snapshots[i-1].HeapAlloc
-		curr := snapshots[i].HeapAlloc
-		next := snapshots[i+1].HeapAlloc
+	// Perform advanced cyclic pattern analysis
+	cycleInfo := d.analyzeCyclicPattern(values, timestamps)
+	if cycleInfo == nil {
+		return nil, nil
+	}
 
-		if curr > prev && curr > next {
-			peaks = append(peaks, curr)
+	// Calculate confidence based on pattern strength
+	confidence := d.calculateConfidence(cycleInfo, values)
+
+	// Generate evidence and recommendations
+	evidence := d.generateEvidence(cycleInfo, values)
+	recommendations := d.generateRecommendations(cycleInfo)
+
+	return &MemoryLeakAlert{
+		Severity:        d.determineSeverity(cycleInfo, confidence),
+		Message:         fmt.Sprintf("Cyclic memory pattern detected: %s", cycleInfo.description),
+		CurrentUsage:    values[len(values)-1],
+		PeakUsage:       cycleInfo.peakValue,
+		GrowthRate:      cycleInfo.growthRate,
+		Duration:        timestamps[len(timestamps)-1].Sub(timestamps[0]),
+		Confidence:      confidence,
+		Evidence:        evidence,
+		Recommendations: recommendations,
+		Metadata: map[string]interface{}{
+			"cycle_length":    cycleInfo.cycleLength,
+			"cycle_count":     cycleInfo.cycleCount,
+			"peak_count":      cycleInfo.peakCount,
+			"growth_rate":     cycleInfo.growthRate,
+			"pattern_type":    cycleInfo.patternType,
+			"amplitude":       cycleInfo.amplitude,
+			"baseline_growth": cycleInfo.baselineGrowth,
+		},
+	}, nil
+}
+
+// cycleInfo holds information about detected cyclic patterns
+type cycleInfo struct {
+	cycleLength    int     // Length of the cycle in samples
+	cycleCount     int     // Number of complete cycles detected
+	peakCount      int     // Number of peaks in the pattern
+	peakValue      uint64  // Highest peak value
+	growthRate     float64 // Overall growth rate (bytes/sec)
+	patternType    string  // Type of pattern (linear, exponential, etc.)
+	amplitude      uint64  // Amplitude of the cycle
+	baselineGrowth float64 // Growth rate of the baseline
+	description    string  // Human-readable description
+}
+
+// analyzeCyclicPattern performs advanced cyclic pattern analysis
+func (d *CyclicLeakDetector) analyzeCyclicPattern(values []uint64, timestamps []time.Time) *cycleInfo {
+	// Find peaks in the data
+	peaks := d.findPeaks(values)
+	if len(peaks) < 3 {
+		return nil // Need at least 3 peaks for cyclic pattern
+	}
+
+	// Calculate cycle length from peak intervals
+	cycleLength := d.calculateCycleLength(peaks, timestamps)
+	if cycleLength <= 0 {
+		return nil
+	}
+
+	// Analyze peak progression
+	peakProgression := d.analyzePeakProgression(peaks, values)
+	if peakProgression == nil {
+		return nil
+	}
+
+	// Calculate growth rates
+	growthRate := d.calculateGrowthRate(values, timestamps)
+	baselineGrowth := d.calculateBaselineGrowth(values, timestamps)
+
+	// Determine pattern type
+	patternType := d.determinePatternType(peakProgression, growthRate)
+
+	// Calculate amplitude
+	amplitude := d.calculateAmplitude(values, cycleLength)
+
+	// Generate description
+	description := d.generateDescription(cycleLength, peakProgression, patternType, growthRate)
+
+	return &cycleInfo{
+		cycleLength:    cycleLength,
+		cycleCount:     len(peaks) - 1,
+		peakCount:      len(peaks),
+		peakValue:      values[peaks[len(peaks)-1]],
+		growthRate:     growthRate,
+		patternType:    patternType,
+		amplitude:      amplitude,
+		baselineGrowth: baselineGrowth,
+		description:    description,
+	}
+}
+
+// findPeaks finds local maxima in the data
+func (d *CyclicLeakDetector) findPeaks(values []uint64) []int {
+	var peaks []int
+
+	for i := 1; i < len(values)-1; i++ {
+		// Check if current point is a peak
+		if values[i] > values[i-1] && values[i] > values[i+1] {
+			// Additional check: ensure it's a significant peak
+			leftDiff := float64(values[i]-values[i-1]) / float64(values[i-1])
+			rightDiff := float64(values[i]-values[i+1]) / float64(values[i+1])
+
+			if leftDiff > 0.05 && rightDiff > 0.05 { // 5% threshold
+				peaks = append(peaks, i)
+			}
 		}
 	}
 
-	// Check if peaks are increasing over time
-	if len(peaks) >= 3 {
-		increasing := true
-		for i := 1; i < len(peaks); i++ {
-			if peaks[i] <= peaks[i-1] {
-				increasing = false
-				break
+	return peaks
+}
+
+// calculateCycleLength calculates the average cycle length from peak intervals
+func (d *CyclicLeakDetector) calculateCycleLength(peaks []int, timestamps []time.Time) int {
+	if len(peaks) < 2 {
+		return 0
+	}
+
+	var totalInterval int
+	for i := 1; i < len(peaks); i++ {
+		interval := peaks[i] - peaks[i-1]
+		totalInterval += interval
+	}
+
+	return totalInterval / (len(peaks) - 1)
+}
+
+// analyzePeakProgression analyzes how peaks change over time
+func (d *CyclicLeakDetector) analyzePeakProgression(peaks []int, values []uint64) []uint64 {
+	var peakValues []uint64
+	for _, peak := range peaks {
+		if peak < len(values) {
+			peakValues = append(peakValues, values[peak])
+		}
+	}
+	return peakValues
+}
+
+// calculateGrowthRate calculates the overall growth rate
+func (d *CyclicLeakDetector) calculateGrowthRate(values []uint64, timestamps []time.Time) float64 {
+	if len(values) < 2 {
+		return 0.0
+	}
+
+	duration := timestamps[len(timestamps)-1].Sub(timestamps[0]).Seconds()
+	if duration <= 0 {
+		return 0.0
+	}
+
+	growth := float64(values[len(values)-1] - values[0])
+	return growth / duration
+}
+
+// calculateBaselineGrowth calculates growth rate of the baseline (minimum values)
+func (d *CyclicLeakDetector) calculateBaselineGrowth(values []uint64, timestamps []time.Time) float64 {
+	if len(values) < 2 {
+		return 0.0
+	}
+
+	// Find local minima for baseline
+	var minima []uint64
+	for i := 1; i < len(values)-1; i++ {
+		if values[i] < values[i-1] && values[i] < values[i+1] {
+			minima = append(minima, values[i])
+		}
+	}
+
+	if len(minima) < 2 {
+		return 0.0
+	}
+
+	duration := timestamps[len(timestamps)-1].Sub(timestamps[0]).Seconds()
+	if duration <= 0 {
+		return 0.0
+	}
+
+	baselineGrowth := float64(minima[len(minima)-1] - minima[0])
+	return baselineGrowth / duration
+}
+
+// determinePatternType determines the type of cyclic pattern
+func (d *CyclicLeakDetector) determinePatternType(peakValues []uint64, growthRate float64) string {
+	if len(peakValues) < 3 {
+		return "unknown"
+	}
+
+	// Check if peaks are increasing
+	increasing := true
+	for i := 1; i < len(peakValues); i++ {
+		if peakValues[i] <= peakValues[i-1] {
+			increasing = false
+			break
+		}
+	}
+
+	if !increasing {
+		return "stable_cyclic"
+	}
+
+	// Calculate peak growth rate
+	peakGrowthRate := float64(peakValues[len(peakValues)-1]-peakValues[0]) / float64(len(peakValues)-1)
+
+	if peakGrowthRate > growthRate*2 {
+		return "accelerating_cyclic"
+	} else if peakGrowthRate > growthRate*0.5 {
+		return "linear_cyclic"
+	} else {
+		return "gradual_cyclic"
+	}
+}
+
+// calculateAmplitude calculates the amplitude of the cyclic pattern
+func (d *CyclicLeakDetector) calculateAmplitude(values []uint64, cycleLength int) uint64 {
+	if len(values) < cycleLength*2 {
+		return 0
+	}
+
+	var totalAmplitude uint64
+	count := 0
+
+	for i := cycleLength; i < len(values)-cycleLength; i += cycleLength {
+		// Find min and max in this cycle
+		min := values[i]
+		max := values[i]
+
+		for j := i; j < i+cycleLength && j < len(values); j++ {
+			if values[j] < min {
+				min = values[j]
+			}
+			if values[j] > max {
+				max = values[j]
 			}
 		}
 
-		if increasing {
-			return &MemoryLeakAlert{
-				Severity:     "medium",
-				Message:      "Cyclic memory pattern detected with increasing peaks",
-				CurrentUsage: snapshots[len(snapshots)-1].HeapAlloc,
-				PeakUsage:    peaks[len(peaks)-1],
-				GrowthRate:   0,
-				Duration:     snapshots[len(snapshots)-1].Timestamp.Sub(snapshots[0].Timestamp),
-				Confidence:   0.7,
-				Evidence:     []string{"Cyclic memory pattern", "Increasing peak values"},
-				Recommendations: []string{
-					"Review periodic operations",
-					"Check for accumulating data structures",
-					"Implement proper cleanup in cycles",
-					"Consider memory pooling for repeated allocations",
-				},
-				Metadata: make(map[string]interface{}),
-			}, nil
+		totalAmplitude += max - min
+		count++
+	}
+
+	if count == 0 {
+		return 0
+	}
+
+	return totalAmplitude / uint64(count)
+}
+
+// generateDescription generates a human-readable description of the pattern
+func (d *CyclicLeakDetector) generateDescription(cycleLength int, peakValues []uint64, patternType string, growthRate float64) string {
+	cycleCount := len(peakValues) - 1
+	avgPeakGrowth := 0.0
+
+	if len(peakValues) > 1 {
+		avgPeakGrowth = float64(peakValues[len(peakValues)-1]-peakValues[0]) / float64(len(peakValues)-1)
+	}
+
+	description := fmt.Sprintf("%s pattern with %d cycles", patternType, cycleCount)
+	description += fmt.Sprintf(", cycle length: %d samples", cycleLength)
+
+	if avgPeakGrowth > 0 {
+		description += fmt.Sprintf(", peak growth: %.0f bytes/cycle", avgPeakGrowth)
+	}
+
+	if growthRate > 0 {
+		description += fmt.Sprintf(", overall growth: %.0f bytes/sec", growthRate)
+	}
+
+	return description
+}
+
+// calculateConfidence calculates confidence in the detection
+func (d *CyclicLeakDetector) calculateConfidence(cycleInfo *cycleInfo, values []uint64) float64 {
+	confidence := 0.5 // Base confidence
+
+	// Increase confidence based on cycle count
+	if cycleInfo.cycleCount >= 3 {
+		confidence += 0.2
+	} else if cycleInfo.cycleCount >= 2 {
+		confidence += 0.1
+	}
+
+	// Increase confidence based on pattern strength
+	if cycleInfo.amplitude > 0 {
+		amplitudeRatio := float64(cycleInfo.amplitude) / float64(cycleInfo.peakValue)
+		if amplitudeRatio > 0.1 {
+			confidence += 0.15
+		} else if amplitudeRatio > 0.05 {
+			confidence += 0.1
 		}
 	}
 
-	return nil, nil
+	// Increase confidence based on growth rate
+	if cycleInfo.growthRate > 0 {
+		confidence += 0.1
+	}
+
+	// Increase confidence based on pattern type
+	switch cycleInfo.patternType {
+	case "accelerating_cyclic":
+		confidence += 0.1
+	case "linear_cyclic":
+		confidence += 0.05
+	}
+
+	// Cap confidence at 1.0
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+
+	return confidence
+}
+
+// determineSeverity determines the severity of the leak
+func (d *CyclicLeakDetector) determineSeverity(cycleInfo *cycleInfo, confidence float64) string {
+	if confidence < 0.6 {
+		return "low"
+	}
+
+	if cycleInfo.growthRate > 1e6 { // > 1MB/sec
+		return "critical"
+	} else if cycleInfo.growthRate > 1e5 { // > 100KB/sec
+		return "high"
+	} else if cycleInfo.growthRate > 1e4 { // > 10KB/sec
+		return "medium"
+	}
+
+	return "low"
+}
+
+// generateEvidence generates evidence for the detection
+func (d *CyclicLeakDetector) generateEvidence(cycleInfo *cycleInfo, values []uint64) []string {
+	evidence := []string{
+		fmt.Sprintf("Detected %d complete cycles", cycleInfo.cycleCount),
+		fmt.Sprintf("Cycle length: %d samples", cycleInfo.cycleLength),
+		fmt.Sprintf("Pattern type: %s", cycleInfo.patternType),
+	}
+
+	if cycleInfo.growthRate > 0 {
+		evidence = append(evidence, fmt.Sprintf("Overall growth rate: %.0f bytes/sec", cycleInfo.growthRate))
+	}
+
+	if cycleInfo.amplitude > 0 {
+		evidence = append(evidence, fmt.Sprintf("Cycle amplitude: %d bytes", cycleInfo.amplitude))
+	}
+
+	if cycleInfo.baselineGrowth > 0 {
+		evidence = append(evidence, fmt.Sprintf("Baseline growth: %.0f bytes/sec", cycleInfo.baselineGrowth))
+	}
+
+	return evidence
+}
+
+// generateRecommendations generates recommendations for fixing the leak
+func (d *CyclicLeakDetector) generateRecommendations(cycleInfo *cycleInfo) []string {
+	recommendations := []string{
+		"Review periodic operations and their memory usage",
+		"Check for accumulating data structures in cycles",
+		"Implement proper cleanup in periodic operations",
+		"Consider memory pooling for repeated allocations",
+	}
+
+	switch cycleInfo.patternType {
+	case "accelerating_cyclic":
+		recommendations = append(recommendations,
+			"Investigate exponential memory growth in cycles",
+			"Check for nested loops or recursive operations",
+			"Review data structure growth patterns",
+		)
+	case "linear_cyclic":
+		recommendations = append(recommendations,
+			"Look for linear memory accumulation in cycles",
+			"Check for missing cleanup in loop iterations",
+		)
+	}
+
+	if cycleInfo.growthRate > 1e5 {
+		recommendations = append(recommendations,
+			"High growth rate detected - immediate investigation required",
+			"Consider implementing memory limits and circuit breakers",
+		)
+	}
+
+	return recommendations
 }
 
 func (d *CyclicLeakDetector) Name() string {

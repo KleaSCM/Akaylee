@@ -3,7 +3,7 @@ Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: realtime.go
 Description: Real-time performance metrics system for the Akaylee Fuzzer. Provides
-production-level CPU monitoring, network monitoring, disk I/O monitoring, and
+CPU monitoring, network monitoring, disk I/O monitoring, and
 advanced performance analytics with sophisticated pattern recognition and
 optimization recommendations.
 */

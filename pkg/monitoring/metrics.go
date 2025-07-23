@@ -12,7 +12,10 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -318,25 +321,193 @@ func (mc *MetricsCollector) getCurrentResourceMetrics() ResourceMetrics {
 	return metrics
 }
 
-// getCPUUsage gets current CPU usage (simplified implementation)
+// getCPUUsage gets current CPU usage using /proc/stat
 func (mc *MetricsCollector) getCPUUsage() float64 {
-	// This is a simplified implementation
-	// In production, would use more sophisticated CPU monitoring
-	return 0.0 // Placeholder
+	// Read /proc/stat to get CPU usage statistics
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		mc.logger.Warnf("Failed to read /proc/stat: %v", err)
+		return 0.0
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if len(lines) == 0 {
+		return 0.0
+	}
+
+	// Parse the first line (total CPU usage)
+	fields := strings.Fields(lines[0])
+	if len(fields) < 5 || fields[0] != "cpu" {
+		return 0.0
+	}
+
+	// Extract CPU time values
+	var total, idle uint64
+	for i := 1; i < len(fields); i++ {
+		val, err := strconv.ParseUint(fields[i], 10, 64)
+		if err != nil {
+			continue
+		}
+		total += val
+		if i == 4 { // idle time is the 5th field
+			idle = val
+		}
+	}
+
+	// Calculate CPU usage percentage
+	if total == 0 {
+		return 0.0
+	}
+
+	// Store previous values for delta calculation
+	mc.mu.Lock()
+	prevTotal, prevIdle := mc.globalMetrics.Metadata["prev_cpu_total"], mc.globalMetrics.Metadata["prev_cpu_idle"]
+	mc.globalMetrics.Metadata["prev_cpu_total"] = total
+	mc.globalMetrics.Metadata["prev_cpu_idle"] = idle
+	mc.mu.Unlock()
+
+	// Calculate delta if we have previous values
+	if prevTotal != nil && prevIdle != nil {
+		prevTotalVal, ok1 := prevTotal.(uint64)
+		prevIdleVal, ok2 := prevIdle.(uint64)
+		if ok1 && ok2 {
+			totalDelta := total - prevTotalVal
+			idleDelta := idle - prevIdleVal
+			if totalDelta > 0 {
+				usage := 100.0 * (1.0 - float64(idleDelta)/float64(totalDelta))
+				return usage
+			}
+		}
+	}
+
+	return 0.0
 }
 
-// getNetworkBytes gets current network usage (simplified implementation)
+// getNetworkBytes gets current network usage using /proc/net/dev
 func (mc *MetricsCollector) getNetworkBytes() uint64 {
-	// This is a simplified implementation
-	// In production, would use network monitoring libraries
-	return 0 // Placeholder
+	// Read /proc/net/dev to get network interface statistics
+	data, err := os.ReadFile("/proc/net/dev")
+	if err != nil {
+		mc.logger.Warnf("Failed to read /proc/net/dev: %v", err)
+		return 0
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var totalBytes uint64
+
+	for _, line := range lines {
+		// Skip header lines
+		if strings.Contains(line, "Inter-|") || strings.Contains(line, "face |") || strings.Contains(line, "lo:") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+
+		// Parse interface name (remove trailing colon)
+		ifaceName := strings.TrimSuffix(fields[0], ":")
+
+		// Skip loopback and virtual interfaces for total bandwidth calculation
+		if ifaceName == "lo" || strings.HasPrefix(ifaceName, "docker") ||
+			strings.HasPrefix(ifaceName, "veth") || strings.HasPrefix(ifaceName, "br-") {
+			continue
+		}
+
+		// Parse received and transmitted bytes
+		rxBytes, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		txBytes, err := strconv.ParseUint(fields[9], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		totalBytes += rxBytes + txBytes
+	}
+
+	// Store previous value for rate calculation
+	mc.mu.Lock()
+	prevBytes := mc.globalMetrics.Metadata["prev_network_bytes"]
+	mc.globalMetrics.Metadata["prev_network_bytes"] = totalBytes
+	mc.mu.Unlock()
+
+	// Calculate bytes per second if we have previous value
+	if prevBytes != nil {
+		prevBytesVal, ok := prevBytes.(uint64)
+		if ok {
+			// Calculate rate based on collection interval
+			rate := float64(totalBytes-prevBytesVal) / mc.collectionInterval.Seconds()
+			return uint64(rate)
+		}
+	}
+
+	return totalBytes
 }
 
-// getDiskIO gets current disk I/O usage (simplified implementation)
+// getDiskIO gets current disk I/O usage using /proc/diskstats
 func (mc *MetricsCollector) getDiskIO() uint64 {
-	// This is a simplified implementation
-	// In production, would use disk monitoring libraries
-	return 0 // Placeholder
+	// Read /proc/diskstats to get disk I/O statistics
+	data, err := os.ReadFile("/proc/diskstats")
+	if err != nil {
+		mc.logger.Warnf("Failed to read /proc/diskstats: %v", err)
+		return 0
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var totalIO uint64
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 14 {
+			continue
+		}
+
+		// Parse disk name
+		diskName := fields[2]
+
+		// Skip partitions and virtual devices
+		if strings.Contains(diskName, "loop") || strings.Contains(diskName, "ram") ||
+			strings.Contains(diskName, "md") || strings.Contains(diskName, "dm-") {
+			continue
+		}
+
+		// Parse read and write operations
+		readOps, err := strconv.ParseUint(fields[3], 10, 64)
+		if err != nil {
+			continue
+		}
+		writeOps, err := strconv.ParseUint(fields[7], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		totalIO += readOps + writeOps
+	}
+
+	// Store previous value for rate calculation
+	mc.mu.Lock()
+	prevIO := mc.globalMetrics.Metadata["prev_disk_io"]
+	mc.globalMetrics.Metadata["prev_disk_io"] = totalIO
+	mc.mu.Unlock()
+
+	// Calculate I/O operations per second if we have previous value
+	if prevIO != nil {
+		prevIOVal, ok := prevIO.(uint64)
+		if ok {
+			// Calculate rate based on collection interval
+			rate := float64(totalIO-prevIOVal) / mc.collectionInterval.Seconds()
+			return uint64(rate)
+		}
+	}
+
+	return totalIO
 }
 
 // addToResourceHistory adds metrics to resource history
