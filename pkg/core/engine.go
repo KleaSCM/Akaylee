@@ -205,6 +205,10 @@ func (e *Engine) Start() error {
 							e.logger.LogMutation(tc.ID, m.ID, e.mutator.Name(), nil)
 						}
 						mutated = m
+						// Re-queue mutated test case for further mutation, up to generation 5
+						if mutated.Generation < 5 {
+							e.queue.Put(mutated)
+						}
 					}
 				}
 				// Use modular executor and analyzer
