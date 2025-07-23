@@ -395,7 +395,14 @@ func (e *Engine) Start() error {
 		case <-done:
 			// Shutdown complete
 		case <-time.After(10 * time.Second):
-			e.logger.Fatalf("[TIMEOUT] Workers did not exit after 10s, forcing report write!")
+			e.logger.Error("[TIMEOUT] Workers did not exit after 10s, forcing report write!")
+			if !e.reportWritten && e.stats.Executions > 0 {
+				e.logger.Warn("[TIMEOUT] Forcing report write after stuck shutdown.")
+				e.writeReport()
+				e.reportWritten = true
+			}
+			e.logger.Error("[TIMEOUT] Exiting process after forced report write.")
+			os.Exit(1)
 		}
 	}
 
@@ -458,6 +465,7 @@ func (e *Engine) Stop() error {
 // runWorker is the main worker loop
 // Continuously processes test cases from the scheduler until stopped
 func (e *Engine) runWorker(worker *Worker) {
+	var totalExec int64
 	for {
 		e.mu.RLock()
 		if !e.running {
@@ -489,7 +497,9 @@ func (e *Engine) runWorker(worker *Worker) {
 			result, err := worker.Execute(testCase)
 			// Increment executions immediately after execution
 			e.stats.IncrementExecutions()
-
+			// Log execution for debugging
+			totalExec = atomic.LoadInt64(&e.stats.Executions)
+			e.logger.Infof("[WORKER] Executed test case %s, total executions: %d", testCase.ID, totalExec)
 			if err != nil {
 				e.logger.Errorf("Worker %d failed to execute test case: %v", worker.ID, err)
 				continue
@@ -499,7 +509,7 @@ func (e *Engine) runWorker(worker *Worker) {
 			e.processResult(result)
 
 			// Auto-stop after max executions (only one worker triggers)
-			totalExec := atomic.LoadInt64(&e.stats.Executions)
+			totalExec = atomic.LoadInt64(&e.stats.Executions)
 			if e.config.MaxExecutions > 0 && totalExec >= e.config.MaxExecutions {
 				e.logger.Warnf("Max executions reached (%d), stopping engine...", e.config.MaxExecutions)
 				e.Stop()
@@ -919,6 +929,7 @@ func coverageHash(profile string) string {
 // Add a helper to write the report (so it can be called from defer/recover)
 func (e *Engine) writeReport() {
 	e.logger.Warn("[REPORT] writeReport() called")
+	e.logger.Warnf("[REPORT] About to write report: Executions=%d, Results=%d", e.stats.Executions, len(e.allResults))
 	reportDir := "./fuzz_output"
 	os.MkdirAll(reportDir, 0755)
 	reportBase := filepath.Join(reportDir, fmt.Sprintf("%s_%s", filepath.Base(e.config.Target), time.Now().Format("2006-01-02_15-04-05")))

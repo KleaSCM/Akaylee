@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 	"time"
 
@@ -125,6 +126,11 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 		return result, err
 	}
 
+	// Track child process
+	childProcsMu.Lock()
+	childProcs = append(childProcs, cmd.Process)
+	childProcsMu.Unlock()
+
 	// Write test case data to stdin if needed
 	if (e.InputMode == "stdin" || e.InputMode == "both") && stdin != nil {
 		_, errStdin := stdin.Write(testCase.Data)
@@ -184,6 +190,18 @@ func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.Ex
 		result.Duration = e.config.Timeout
 	}
 
+	// After process exits, remove from childProcs
+	defer func() {
+		childProcsMu.Lock()
+		for i, p := range childProcs {
+			if p.Pid == cmd.Process.Pid {
+				childProcs = append(childProcs[:i], childProcs[i+1:]...)
+				break
+			}
+		}
+		childProcsMu.Unlock()
+	}()
+
 	// Always log output
 	result.Output = stdout
 	if len(stderr) > 0 {
@@ -204,8 +222,20 @@ func (e *ProcessExecutor) setResourceLimits(cmd *exec.Cmd) {
 
 // Cleanup performs any necessary cleanup operations
 func (e *ProcessExecutor) Cleanup() error {
+	childProcsMu.Lock()
+	for _, p := range childProcs {
+		if p != nil {
+			fmt.Printf("[EXECUTOR] Killing child process PID %d\n", p.Pid)
+			p.Kill()
+		}
+	}
+	childProcs = nil
+	childProcsMu.Unlock()
 	return nil
 }
 
 // Reset resets the executor state (no-op for ProcessExecutor)
 func (e *ProcessExecutor) Reset() error { return nil }
+
+var childProcs []*os.Process
+var childProcsMu = &sync.Mutex{}
