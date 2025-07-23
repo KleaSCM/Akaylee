@@ -69,7 +69,7 @@ func (m *APIMutator) MutateAPIRequest(request *interfaces.APIRequest) (*interfac
 		ID:          generateRequestID(),
 		TargetID:    request.TargetID,
 		Method:      request.Method,
-		URL:         request.URL,
+		URL:         request.URL, // Always keep the original, valid URL
 		Headers:     make(map[string]string),
 		QueryParams: make(map[string]string),
 		PathParams:  make(map[string]string),
@@ -246,6 +246,11 @@ func (m *APIMutator) Mutate(testCase *interfaces.TestCase) (*interfaces.TestCase
 	mutatedReq, err := m.MutateAPIRequest(&req)
 	if err != nil {
 		return testCase, err
+	}
+	// Always set the URL to the original, valid URL
+	mutatedReq.URL = req.URL
+	if m.logger != nil {
+		m.logger.Debugf("[APIMutator] Mutated request URL: %s", mutatedReq.URL)
 	}
 	mutatedData, err := json.Marshal(mutatedReq)
 	if err != nil {

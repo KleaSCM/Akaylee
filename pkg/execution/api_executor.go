@@ -261,8 +261,14 @@ func (e *HTTPAPIExecutor) ExecuteAPIBatch(ctx context.Context, requests []*inter
 
 // createHTTPRequest creates an HTTP request from an API request
 func (e *HTTPAPIExecutor) createHTTPRequest(ctx context.Context, request *interfaces.APIRequest) (*http.Request, error) {
-	// Build URL with query parameters
-	parsedURL, err := url.Parse(request.URL)
+	// Always use the configured target URL, not the mutated request's URL
+	urlToUse := ""
+	if len(e.config.Targets) > 0 {
+		urlToUse = e.config.Targets[0].URL
+	} else {
+		return nil, fmt.Errorf("no configured target URL in API executor")
+	}
+	parsedURL, err := url.Parse(urlToUse)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
