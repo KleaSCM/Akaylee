@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"crypto/sha256"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
@@ -80,6 +81,7 @@ type Engine struct {
 	reportWritten      bool
 	Done               chan struct{}
 	stopOnce           sync.Once
+	allResults         []*ExecutionResult // Track all results for reporting
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -391,36 +393,37 @@ func (e *Engine) Start() error {
 func (e *Engine) Stop() error {
 	var err error
 	e.stopOnce.Do(func() {
+		e.logger.Warn("[STOP] Entered Stop()")
 		e.mu.Lock()
 		if !e.running {
 			e.mu.Unlock()
 			err = fmt.Errorf("fuzzer is not running")
 			return
 		}
+		e.logger.Info("Stopping fuzzer engine")
+		// Cancel context to signal all goroutines to stop
+		e.cancel()
+		// Set running = false so workers exit immediately
 		e.running = false
 		e.mu.Unlock()
 
-		e.logger.Info("Stopping fuzzer engine")
-
-		// Cancel context to signal all goroutines to stop
-		e.cancel()
-
 		// Wait for all workers to complete
+		e.logger.Warn("[STOP] Waiting for all workers and scheduler to finish...")
 		e.wg.Wait()
-
 		// Cleanup executor
 		if e.executor != nil {
 			e.executor.Cleanup()
 		}
 
-		// Do not write report here; let main goroutine handle it
-
 		select {
 		case <-e.Done:
 			// already closed
 		default:
+			e.logger.Warn("[STOP] Closing Done channel.")
 			close(e.Done)
 		}
+
+		e.logger.Warn("[STOP] Stop() complete.")
 	})
 	return err
 }
@@ -429,10 +432,23 @@ func (e *Engine) Stop() error {
 // Continuously processes test cases from the scheduler until stopped
 func (e *Engine) runWorker(worker *Worker) {
 	for {
+		e.mu.RLock()
+		if !e.running {
+			e.mu.RUnlock()
+			return
+		}
+		e.mu.RUnlock()
 		select {
 		case <-e.ctx.Done():
 			return
 		default:
+			// Check running again before executing
+			e.mu.RLock()
+			if !e.running {
+				e.mu.RUnlock()
+				return
+			}
+			e.mu.RUnlock()
 			// Get test case from scheduler
 			testCase := e.scheduler.Next()
 			if testCase == nil {
@@ -452,11 +468,12 @@ func (e *Engine) runWorker(worker *Worker) {
 			// Process result
 			e.processResult(result)
 
-			// Update statistics
+			// Update statistics (atomic)
 			e.stats.IncrementExecutions()
+			totalExec := atomic.LoadInt64(&e.stats.Executions)
 
-			// Auto-stop after max executions
-			if e.config.MaxExecutions > 0 && e.stats.Executions >= e.config.MaxExecutions {
+			// Auto-stop after max executions (only one worker triggers)
+			if e.config.MaxExecutions > 0 && totalExec >= e.config.MaxExecutions {
 				e.logger.Warnf("Max executions reached (%d), stopping engine...", e.config.MaxExecutions)
 				e.Stop()
 				return
@@ -468,7 +485,7 @@ func (e *Engine) runWorker(worker *Worker) {
 // runScheduler manages the test case queue and scheduling
 // Implements intelligent scheduling algorithms for optimal coverage
 func (e *Engine) runScheduler() {
-	e.wg.Done()
+	defer e.wg.Done()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -577,6 +594,10 @@ func (e *Engine) calculatePriority(testCase *TestCase) int {
 // processResult handles the result of a test case execution
 // Updates coverage, detects crashes, and manages the corpus
 func (e *Engine) processResult(result *ExecutionResult) {
+	// Log every result processed
+	e.logger.Infof("[PROCESS] Result processed: ID=%s, Status=%d", result.TestCaseID, result.Status)
+	// Append to allResults for reporting
+	e.allResults = append(e.allResults, result)
 	// Analyze result
 	if err := e.analyzer.Analyze(result); err != nil {
 		e.logger.Errorf("Failed to analyze result: %v", err)
@@ -891,6 +912,7 @@ func (e *Engine) writeReport() {
 		"crash_results":       e.crashResults,
 		"hang_results":        e.hangResults,
 		"interesting_results": e.interestingResults,
+		"all_results":         e.allResults, // Include all results
 	}
 	jsonFile, err := os.Create(reportBase + ".json")
 	if err != nil {
@@ -910,19 +932,12 @@ func (e *Engine) writeReport() {
 	htmlFile.WriteString(fmt.Sprintf("<h1>Akaylee Fuzzer Report for %s</h1>", e.config.Target))
 	htmlFile.WriteString(fmt.Sprintf("<p>Start: %s<br>End: %s</p>", e.stats.StartTime, time.Now()))
 	htmlFile.WriteString(fmt.Sprintf("<p>Executions: %d<br>Crashes: %d<br>Hangs: %d<br>Unique Crashes: %d<br>Coverage Edges: %d<br>Coverage Blocks: %d</p>", e.stats.Executions, len(e.crashResults), len(e.hangResults), e.stats.UniqueCrashes, e.stats.CoverageEdges, e.stats.CoverageBlocks))
-	htmlFile.WriteString("<h2>Crashes</h2><ul>")
-	for _, r := range e.crashResults {
+	htmlFile.WriteString("<h2>All Results</h2><ul>")
+	for _, r := range e.allResults {
 		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
 	}
-	htmlFile.WriteString("</ul><h2>Hangs</h2><ul>")
-	for _, r := range e.hangResults {
-		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
-	}
-	htmlFile.WriteString("</ul><h2>Interesting Results</h2><ul>")
-	for _, r := range e.interestingResults {
-		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
-	}
-	htmlFile.WriteString("</ul></body></html>")
+	htmlFile.WriteString("</ul>")
+	htmlFile.WriteString("</body></html>")
 	htmlFile.Close()
 	e.logger.Warn("[REPORT] writeReport() complete")
 }
