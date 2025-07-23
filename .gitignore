@@ -56,3 +56,4 @@ temp/
 
 #ignore TARGET
 TARGET/
+corpus/
