@@ -2,9 +2,9 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: crash_reporter.go
-Description: Production-level AndroidCrashReporter. Implements CrashReporter interface for collecting
+Description: AndroidCrashReporter. Implements CrashReporter interface for collecting
 and reporting Android crashes, ANRs, and security issues by parsing adb logcat output with regex-based
-detection. Robust, production-level crash triage and reporting.
+detection. Robust crash triage and reporting.
 */
 
 package mobile

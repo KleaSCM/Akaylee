@@ -2,7 +2,7 @@
 Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: fuzzer.go
-Description:Implements MobileFuzzer interface to orchestrate
+Description: AndroidMobileFuzzer. Implements MobileFuzzer interface to orchestrate
 Android device/emulator fuzzing: app install, launch, intent/event mutation, crash monitoring, and reporting.
 Provides robust, modular, and extensible mobile fuzzing pipeline.
 */

@@ -3,7 +3,7 @@ Author: KleaSCM
 Email: KleaSCM@gmail.com
 File: mobile.go
 Description: CLI command for mobile app fuzzing. Provides flags for device/app selection, install,
-launch, fuzz, and stop. Wires up AndroidMobileFuzzer and all components for production-level mobile fuzzing.
+launch, fuzz, and stop. Wires up AndroidMobileFuzzer and all components for mobile fuzzing.
 */
 
 package commands
