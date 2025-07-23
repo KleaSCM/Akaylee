@@ -24,14 +24,16 @@ import (
 // Wires up the corpus, queue, and a single worker for now
 // Modular and ready for further expansion
 type Engine struct {
-	config  *FuzzerConfig
-	corpus  *Corpus
-	queue   *PriorityQueue
-	worker  *Worker
-	stats   *FuzzerStats
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
-	started bool
+	config        *FuzzerConfig
+	corpus        *Corpus
+	queue         *PriorityQueue
+	worker        *Worker
+	stats         *FuzzerStats
+	stopCh        chan struct{}
+	wg            sync.WaitGroup
+	started       bool
+	reportOnce    sync.Once
+	reportResults *[]map[string]interface{}
 }
 
 // NewEngine creates a new modular engine instance
@@ -52,6 +54,42 @@ func (e *Engine) Initialize(config *FuzzerConfig) error {
 	return nil
 }
 
+func (e *Engine) writeReports() {
+	if e.reportResults == nil {
+		fmt.Printf("[Engine] writeReports() called but reportResults is nil!\n")
+		return
+	}
+	results := *e.reportResults
+	fmt.Printf("[Engine] writeReports() called (guaranteed once). Results: %d\n", len(results))
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	os.MkdirAll(e.config.OutputDir, 0755)
+	jsonPath := filepath.Join(e.config.OutputDir, fmt.Sprintf("modular_fuzz_report_%s.json", timestamp))
+	fmt.Printf("[Engine] Attempting to write JSON report: %s\n", jsonPath)
+	jsonData, _ := json.MarshalIndent(results, "", "  ")
+	err := os.WriteFile(jsonPath, jsonData, 0644)
+	if err != nil {
+		fmt.Printf("[Engine] Error writing JSON report: %v\n", err)
+	} else {
+		fmt.Printf("[Engine] JSON report written: %s\n", jsonPath)
+	}
+	htmlPath := filepath.Join(e.config.OutputDir, fmt.Sprintf("modular_fuzz_report_%s.html", timestamp))
+	fmt.Printf("[Engine] Attempting to write HTML report: %s\n", htmlPath)
+	f, err := os.Create(htmlPath)
+	if err != nil {
+		fmt.Printf("[Engine] Error creating HTML report: %v\n", err)
+	} else {
+		defer f.Close()
+		f.WriteString("<html><head><title>Akaylee Modular Fuzz Report</title><style>body{font-family:sans-serif;}table{border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px;}th{background:#eee;}tr.crash{background:#fdd;}tr.ok{background:#dfd;}</style></head><body>")
+		f.WriteString("<h1>Akaylee Modular Fuzz Report</h1><table><tr><th>Test Case</th><th>Status</th><th>Duration</th><th>Error</th><th>Output</th></tr>")
+		for _, r := range results {
+			rowClass := r["status"].(string)
+			f.WriteString(fmt.Sprintf("<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><pre>%s</pre></td></tr>", rowClass, r["test_case"], r["status"], r["duration"], r["error"], htmlEscape(r["output"].(string))))
+		}
+		f.WriteString("</table></body></html>")
+		fmt.Printf("[Engine] HTML report written: %s\n", htmlPath)
+	}
+}
+
 // Start begins the fuzzing process (now with real execution loop)
 func (e *Engine) Start() error {
 	if e.started {
@@ -61,8 +99,15 @@ func (e *Engine) Start() error {
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
-		files, _ := ioutil.ReadDir(e.config.CorpusDir)
 		var results []map[string]interface{}
+		e.reportResults = &results
+		defer func() {
+			e.reportOnce.Do(func() {
+				fmt.Printf("[Engine] writeReports() called from goroutine defer\n")
+				e.writeReports()
+			})
+		}()
+		files, _ := ioutil.ReadDir(e.config.CorpusDir)
 		for _, file := range files {
 			if file.IsDir() {
 				continue
@@ -98,34 +143,6 @@ func (e *Engine) Start() error {
 			default:
 			}
 		}
-		// Write JSON and HTML report after all test cases
-		timestamp := time.Now().Format("2006-01-02_15-04-05")
-		os.MkdirAll(e.config.OutputDir, 0755)
-		jsonPath := filepath.Join(e.config.OutputDir, fmt.Sprintf("modular_fuzz_report_%s.json", timestamp))
-		fmt.Printf("[Engine] Attempting to write JSON report: %s\n", jsonPath)
-		jsonData, _ := json.MarshalIndent(results, "", "  ")
-		err := os.WriteFile(jsonPath, jsonData, 0644)
-		if err != nil {
-			fmt.Printf("[Engine] Error writing JSON report: %v\n", err)
-		} else {
-			fmt.Printf("[Engine] JSON report written: %s\n", jsonPath)
-		}
-		htmlPath := filepath.Join(e.config.OutputDir, fmt.Sprintf("modular_fuzz_report_%s.html", timestamp))
-		fmt.Printf("[Engine] Attempting to write HTML report: %s\n", htmlPath)
-		f, err := os.Create(htmlPath)
-		if err != nil {
-			fmt.Printf("[Engine] Error creating HTML report: %v\n", err)
-		} else {
-			defer f.Close()
-			f.WriteString("<html><head><title>Akaylee Modular Fuzz Report</title><style>body{font-family:sans-serif;}table{border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px;}th{background:#eee;}tr.crash{background:#fdd;}tr.ok{background:#dfd;}</style></head><body>")
-			f.WriteString("<h1>Akaylee Modular Fuzz Report</h1><table><tr><th>Test Case</th><th>Status</th><th>Duration</th><th>Error</th><th>Output</th></tr>")
-			for _, r := range results {
-				rowClass := r["status"].(string)
-				f.WriteString(fmt.Sprintf("<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><pre>%s</pre></td></tr>", rowClass, r["test_case"], r["status"], r["duration"], r["error"], htmlEscape(r["output"].(string))))
-			}
-			f.WriteString("</table></body></html>")
-			fmt.Printf("[Engine] HTML report written: %s\n", htmlPath)
-		}
 	}()
 	return nil
 }
@@ -137,6 +154,10 @@ func (e *Engine) Stop() error {
 	}
 	close(e.stopCh)
 	e.wg.Wait()
+	e.reportOnce.Do(func() {
+		fmt.Printf("[Engine] writeReports() called from Stop()\n")
+		e.writeReports()
+	})
 	e.started = false
 	return nil
 }
