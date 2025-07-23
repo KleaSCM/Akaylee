@@ -12,39 +12,50 @@ import (
 	"time"
 
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
+	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 )
 
 func main() {
+	fmt.Println("[Akaylee] Starting modular engine...")
 	config := &core.FuzzerConfig{
 		Target:        "TARGET/vulnscan",
 		CorpusDir:     "TARGET/corpus/split",
-		OutputDir:     "./fuzz_output",
-		CrashDir:      "./crashes",
-		Workers:       1,
-		Timeout:       5 * time.Second,
-		MemoryLimit:   256 * 1024 * 1024, // 256MB
-		MaxCorpusSize: 10000,
-		MutationRate:  0.01,
-		MaxMutations:  5,
-		Strategy:      "mutation",
-		CoverageType:  "edge",
-		SchedulerType: "priority",
-		SessionID:     "standalone-test",
+		OutputDir:     "fuzz_output",
+		MaxCorpusSize: 1000,
 	}
-	engine := core.NewEngine()
-	if err := engine.Initialize(config); err != nil {
+	// Create a BitFlipMutator with 1% mutation rate
+	bitFlip := strategies.NewBitFlipMutator(0.01)
+	mutator := core.NewAdapterMutator(bitFlip)
+	// Create a logger
+	loggerConfig := &logging.LoggerConfig{
+		Level:     logging.LogLevelDebug,
+		Format:    logging.LogFormatCustom,
+		OutputDir: "./logs",
+		MaxFiles:  10,
+		MaxSize:   10 * 1024 * 1024, // 10MB
+		Timestamp: true,
+		Caller:    false,
+		Colors:    true,
+		Compress:  false,
+		Target:    config.Target,
+	}
+	logger, err := logging.NewLogger(loggerConfig)
+	if err != nil {
 		panic(err)
 	}
-	fmt.Println("[Akaylee] Starting modular engine...")
+	defer logger.Close()
+	engine := core.NewEngine()
+	if err := engine.Initialize(config, mutator, logger); err != nil {
+		panic(err)
+	}
 	if err := engine.Start(); err != nil {
 		panic(err)
 	}
-	// Let it run for 5 seconds as a demo
 	time.Sleep(5 * time.Second)
 	fmt.Println("[Akaylee] Stopping modular engine...")
 	if err := engine.Stop(); err != nil {
 		panic(err)
 	}
-	stats := engine.GetStats()
-	fmt.Printf("[Akaylee] Final stats: Executions=%d, Crashes=%d\n", stats.Executions, stats.Crashes)
+	fmt.Printf("[Akaylee] Final stats: Executions=%d, Crashes=%d\n", engine.GetStats().Executions, engine.GetStats().Crashes)
 }

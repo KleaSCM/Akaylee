@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 )
 
 // Engine is a minimal implementation of the FuzzerEngine interface
@@ -34,6 +36,8 @@ type Engine struct {
 	started       bool
 	reportOnce    sync.Once
 	reportResults *[]map[string]interface{}
+	mutator       Mutator
+	logger        *logging.Logger
 }
 
 // NewEngine creates a new modular engine instance
@@ -45,10 +49,12 @@ func NewEngine() *Engine {
 }
 
 // Initialize sets up the engine with the given configuration
-func (e *Engine) Initialize(config *FuzzerConfig) error {
+func (e *Engine) Initialize(config *FuzzerConfig, mutator Mutator, logger *logging.Logger) error {
 	e.config = config
 	e.corpus = NewCorpus(config.MaxCorpusSize)
 	e.queue = NewPriorityQueue()
+	e.mutator = mutator
+	e.logger = logger
 	// For now, create a dummy worker (no executor/analyzer yet)
 	e.worker = nil // Will be set in Start when executor/analyzer are available
 	return nil
@@ -117,8 +123,31 @@ func (e *Engine) Start() error {
 			if err != nil {
 				continue
 			}
+			// Mutate the test case before execution
+			orig := &TestCase{
+				ID:         file.Name(),
+				Data:       data,
+				ParentID:   "",
+				Generation: 0,
+				CreatedAt:  time.Now(),
+				Priority:   100,
+				Metadata:   make(map[string]interface{}),
+			}
+			mutated := orig
+			if e.mutator != nil {
+				m, err := e.mutator.Mutate(orig)
+				if err == nil && m != nil {
+					fmt.Printf("[Engine] Mutated test case %s using %s\n", orig.ID, e.mutator.Name())
+					if e.logger != nil {
+						e.logger.LogMutation(orig.ID, m.ID, e.mutator.Name(), nil)
+					}
+					mutated = m
+				} else {
+					fmt.Printf("[Engine] Mutation failed for %s: %v\n", orig.ID, err)
+				}
+			}
 			cmd := exec.Command(e.config.Target, "--fuzz")
-			cmd.Stdin = bytes.NewReader(data)
+			cmd.Stdin = bytes.NewReader(mutated.Data)
 			start := time.Now()
 			out, err := cmd.CombinedOutput()
 			dur := time.Since(start)
@@ -126,11 +155,22 @@ func (e *Engine) Start() error {
 			if err != nil {
 				status = "crash"
 				e.stats.Crashes++
+				if e.logger != nil {
+					e.logger.LogCrash(mutated.ID, "process error", map[string]interface{}{
+						"error": fmt.Sprintf("%v", err),
+					})
+				}
 			}
 			e.stats.Executions++
-			fmt.Printf("[Engine] Test: %s | Status: %s | Duration: %s\nOutput: %s\n", file.Name(), status, dur, string(out))
+			if e.logger != nil {
+				e.logger.LogExecution(mutated.ID, dur, status, map[string]interface{}{
+					"output": string(out),
+					"error":  fmt.Sprintf("%v", err),
+				})
+			}
+			fmt.Printf("[Engine] Test: %s | Status: %s | Duration: %s\nOutput: %s\n", mutated.ID, status, dur, string(out))
 			results = append(results, map[string]interface{}{
-				"test_case": file.Name(),
+				"test_case": mutated.ID,
 				"status":    status,
 				"duration":  dur.String(),
 				"output":    string(out),
@@ -142,6 +182,10 @@ func (e *Engine) Start() error {
 				return
 			default:
 			}
+		}
+		// At the end of the goroutine, log stats
+		if e.logger != nil {
+			e.logger.LogStats(e.stats.Executions, e.stats.Crashes, 0, float64(e.stats.Executions)/float64(time.Since(e.stats.StartTime).Seconds()), nil)
 		}
 	}()
 	return nil
