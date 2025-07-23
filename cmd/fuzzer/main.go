@@ -310,6 +310,38 @@ implementation bugs and security issues through divergence analysis.`,
 
 	rootCmd.AddCommand(differentialCmd)
 
+	// Add dashboard command for beautiful HTML reports
+	dashboardCmd := &cobra.Command{
+		Use:   "dashboard",
+		Short: "Generate beautiful HTML dashboard reports",
+		Long: `Generate comprehensive HTML dashboards with interactive charts,
+real-time metrics, crash analysis, coverage tracking, and state exploration
+visualizations. Perfect for sharing results and monitoring fuzzing progress.`,
+		RunE: commands.PerformDashboardGeneration,
+	}
+
+	// Add dashboard flags
+	dashboardCmd.Flags().String("output-dir", "./dashboard", "Output directory for dashboard files")
+	dashboardCmd.Flags().String("title", "Akaylee Fuzzer Report", "Dashboard title")
+	dashboardCmd.Flags().Bool("include-crashes", true, "Include crash analysis in dashboard")
+	dashboardCmd.Flags().Bool("include-states", true, "Include state exploration data in dashboard")
+	dashboardCmd.Flags().Bool("include-coverage", true, "Include coverage analysis in dashboard")
+	dashboardCmd.Flags().Bool("include-performance", true, "Include performance metrics in dashboard")
+	dashboardCmd.Flags().Bool("auto-open", false, "Automatically open dashboard in browser")
+	dashboardCmd.Flags().String("format", "html", "Dashboard format (html, json)")
+
+	// Bind dashboard flags to viper
+	viper.BindPFlag("dashboard.output_dir", dashboardCmd.Flags().Lookup("output-dir"))
+	viper.BindPFlag("dashboard.title", dashboardCmd.Flags().Lookup("title"))
+	viper.BindPFlag("dashboard.include_crashes", dashboardCmd.Flags().Lookup("include-crashes"))
+	viper.BindPFlag("dashboard.include_states", dashboardCmd.Flags().Lookup("include-states"))
+	viper.BindPFlag("dashboard.include_coverage", dashboardCmd.Flags().Lookup("include-coverage"))
+	viper.BindPFlag("dashboard.include_performance", dashboardCmd.Flags().Lookup("include-performance"))
+	viper.BindPFlag("dashboard.auto_open", dashboardCmd.Flags().Lookup("auto-open"))
+	viper.BindPFlag("dashboard.format", dashboardCmd.Flags().Lookup("format"))
+
+	rootCmd.AddCommand(dashboardCmd)
+
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
 

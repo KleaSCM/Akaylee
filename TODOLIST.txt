@@ -30,7 +30,8 @@ Akaylee Fuzzer TODO
 [x] Crash triage and minimization
 [x] Reproducibility harness (auto-replay of crashes)
 [x] Differential fuzzing (compare multiple implementations)
-[x] State-aware fuzzing (for stateful targets)
+  [x] State-aware fuzzing (for stateful targets)
+  [x] HTML dashboards - Beautiful web reports
 [ ] API fuzzing - Network and HTTP target support
 [ ] In-depth reporting (HTML, dashboards, etc.)
 [ ] CI/CD integration for automated regression fuzzing
