@@ -79,6 +79,7 @@ type Engine struct {
 	interestingResults []*ExecutionResult
 	reportWritten      bool
 	Done               chan struct{}
+	stopOnce           sync.Once
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -368,51 +369,60 @@ func (e *Engine) Start() error {
 	}()
 
 	e.logger.Info("Fuzzer engine started successfully")
+
+	// Block until shutdown is complete
+	<-e.Done
+
+	// Write report after shutdown
+	if !e.reportWritten && e.stats.Executions > 0 {
+		defer func() {
+			if r := recover(); r != nil {
+				e.logger.Fatalf("[START] Report writing panicked: %v", r)
+			}
+		}()
+		e.writeReport()
+		e.reportWritten = true
+	}
 	return nil
 }
 
 // Stop gracefully stops the fuzzing process
 // Signals all workers to stop and waits for completion
 func (e *Engine) Stop() error {
-	e.mu.Lock()
-	if !e.running {
+	var err error
+	e.stopOnce.Do(func() {
+		e.mu.Lock()
+		if !e.running {
+			e.mu.Unlock()
+			err = fmt.Errorf("fuzzer is not running")
+			return
+		}
+		e.running = false
 		e.mu.Unlock()
-		return fmt.Errorf("fuzzer is not running")
-	}
-	e.running = false
-	e.mu.Unlock()
 
-	e.logger.Info("Stopping fuzzer engine")
+		e.logger.Info("Stopping fuzzer engine")
 
-	// Cancel context to signal all goroutines to stop
-	e.cancel()
+		// Cancel context to signal all goroutines to stop
+		e.cancel()
 
-	// Wait for all workers to complete
-	e.wg.Wait()
+		// Wait for all workers to complete
+		e.wg.Wait()
 
-	// Cleanup executor
-	if e.executor != nil {
-		e.executor.Cleanup()
-	}
+		// Cleanup executor
+		if e.executor != nil {
+			e.executor.Cleanup()
+		}
 
-	// Write report to fuzz_output
-	if !e.reportWritten {
-		defer func() {
-			if r := recover(); r != nil {
-				e.logger.Fatalf("[STOP] Report writing panicked: %v", r)
-			}
-		}()
-		e.writeReport()
-		e.reportWritten = true
-	}
+		// Do not write report here; let main goroutine handle it
 
-	select {
-	case <-e.Done:
-		// already closed
-	default:
-		close(e.Done)
-	}
-	return nil
+		select {
+		case <-e.Done:
+			// already closed
+		default:
+			close(e.Done)
+		}
+	})
+	return err
 }
 
 // runWorker is the main worker loop
@@ -448,7 +458,7 @@ func (e *Engine) runWorker(worker *Worker) {
 			// Auto-stop after max executions
 			if e.config.MaxExecutions > 0 && e.stats.Executions >= e.config.MaxExecutions {
 				e.logger.Warnf("Max executions reached (%d), stopping engine...", e.config.MaxExecutions)
-				go e.Stop()
+				e.Stop()
 				return
 			}
 		}
