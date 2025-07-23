@@ -31,7 +31,7 @@ type Worker struct {
 	Target string // Target name for logging
 
 	// Performance tracking
-	executions int64     // Number of test cases executed
+	Executions int64     // Number of test cases executed
 	crashes    int64     // Number of crashes found
 	hangs      int64     // Number of hangs detected
 	startTime  time.Time // When worker started
@@ -71,7 +71,7 @@ func NewWorker(id int, executor Executor, analyzer Analyzer, logger *logrus.Logg
 // Handles all aspects of test case execution including resource monitoring
 func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 	w.mu.Lock()
-	w.executions++
+	w.Executions++
 	w.mu.Unlock()
 
 	// Create execution result
@@ -243,7 +243,7 @@ func (w *Worker) GetStats() map[string]interface{} {
 
 	stats := make(map[string]interface{})
 	stats["id"] = w.ID
-	stats["executions"] = w.executions
+	stats["executions"] = w.Executions
 	stats["crashes"] = w.crashes
 	stats["hangs"] = w.hangs
 	stats["start_time"] = w.startTime
@@ -255,7 +255,7 @@ func (w *Worker) GetStats() map[string]interface{} {
 	// Calculate execution rate
 	uptime := time.Since(w.startTime).Seconds()
 	if uptime > 0 {
-		stats["executions_per_second"] = float64(w.executions) / uptime
+		stats["executions_per_second"] = float64(w.Executions) / uptime
 	}
 
 	return stats

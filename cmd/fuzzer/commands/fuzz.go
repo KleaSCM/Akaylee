@@ -162,11 +162,13 @@ func RunFuzz(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start fuzzer: %w", err)
 	}
 
+	// Wait for engine to finish (not just ctx.Done())
+	if doneChan := engine.DoneChan(); doneChan != nil {
+		<-doneChan
+	}
+
 	// Start statistics reporting
 	go reportStats(ctx, engine)
-
-	// Wait for completion or interruption
-	<-ctx.Done()
 
 	// Stop fuzzer gracefully
 	if err := engine.Stop(); err != nil {
@@ -184,6 +186,9 @@ func RunFuzz(cmd *cobra.Command, args []string) error {
 func setupFuzzerComponents(engine *core.Engine, config *interfaces.FuzzerConfig) error {
 	// Create executor
 	executor := execution.NewProcessExecutor()
+	if err := executor.Initialize(config); err != nil {
+		return fmt.Errorf("failed to initialize executor: %w", err)
+	}
 	engine.SetExecutor(executor)
 
 	// Create analyzer

@@ -78,6 +78,7 @@ type Engine struct {
 	hangResults        []*ExecutionResult
 	interestingResults []*ExecutionResult
 	reportWritten      bool
+	Done               chan struct{}
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -94,6 +95,7 @@ func NewEngine() *Engine {
 		crashResults:       make([]*ExecutionResult, 0),
 		hangResults:        make([]*ExecutionResult, 0),
 		interestingResults: make([]*ExecutionResult, 0),
+		Done:               make(chan struct{}),
 	}
 }
 
@@ -399,7 +401,12 @@ func (e *Engine) Stop() error {
 		e.reportWritten = true
 	}
 
-	e.logger.Info("Fuzzer engine stopped successfully")
+	select {
+	case <-e.Done:
+		// already closed
+	default:
+		close(e.Done)
+	}
 	return nil
 }
 
@@ -879,4 +886,9 @@ func (e *Engine) writeReport() {
 	}
 	htmlFile.WriteString("</ul></body></html>")
 	htmlFile.Close()
+}
+
+// DoneChan returns the Done channel for engine completion notification
+func (e *Engine) DoneChan() <-chan struct{} {
+	return e.Done
 }
