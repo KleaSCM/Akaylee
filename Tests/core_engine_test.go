@@ -9,6 +9,7 @@ scheduler, reporters, coverage collector, reproducibility harness, and worker co
 package core_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -254,6 +255,55 @@ func TestEngineEdgeCases(t *testing.T) {
 	})
 }
 
+// TestEngineSingleExecution tests a minimal execution loop
+func TestEngineSingleExecution(t *testing.T) {
+	// Setup minimal config
+	config := &interfaces.FuzzerConfig{
+		Target:        "TARGET/vulnscan",
+		CorpusDir:     "TARGET/corpus/split",
+		OutputDir:     "./fuzz_output",
+		CrashDir:      "./crashes",
+		Workers:       1,
+		Timeout:       2 * time.Second,
+		MemoryLimit:   0,
+		MaxCorpusSize: 10,
+		MutationRate:  0.0,
+		MaxMutations:  1,
+		Strategy:      "mutation",
+		CoverageType:  "edge",
+		SchedulerType: "priority",
+		SessionID:     "test-session",
+		MaxExecutions: 1,
+	}
+
+	engine := core.NewEngine()
+	// Set up a dummy executor that just returns success
+	engine.SetExecutor(&dummyExecutor{})
+	engine.SetAnalyzer(&dummyAnalyzer{})
+	engine.SetMutators([]interfaces.Mutator{&dummyMutator{}})
+
+	err := engine.Initialize(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize engine: %v", err)
+	}
+
+	err = engine.Start()
+	if err != nil {
+		t.Fatalf("Engine did not start: %v", err)
+	}
+
+	stats := engine.GetStats()
+	if stats.Executions == 0 {
+		t.Fatalf("No executions recorded!")
+	}
+
+	// Check that a report file exists
+	files, err := os.ReadDir("./fuzz_output")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("No report written!")
+	}
+}
+
 // TestReporter is a test implementation of the Reporter interface
 type TestReporter struct {
 	testCasesAdded    []*core.TestCase
@@ -267,3 +317,33 @@ func (r *TestReporter) OnTestCaseAdded(testCase *core.TestCase) {
 func (r *TestReporter) OnTestCaseExecuted(result *core.ExecutionResult) {
 	r.testCasesExecuted = append(r.testCasesExecuted, result)
 }
+
+type dummyExecutor struct{}
+
+func (d *dummyExecutor) Initialize(*interfaces.FuzzerConfig) error { return nil }
+func (d *dummyExecutor) Execute(*interfaces.TestCase) (*interfaces.ExecutionResult, error) {
+	return &interfaces.ExecutionResult{Status: interfaces.StatusSuccess}, nil
+}
+func (d *dummyExecutor) Cleanup() error { return nil }
+func (d *dummyExecutor) Reset() error   { return nil }
+
+type dummyAnalyzer struct{}
+
+func (d *dummyAnalyzer) Analyze(*interfaces.ExecutionResult) error { return nil }
+func (d *dummyAnalyzer) IsInteresting(*interfaces.TestCase) bool   { return false }
+func (d *dummyAnalyzer) GetCoverage(*interfaces.ExecutionResult) (*interfaces.Coverage, error) {
+	return nil, nil
+}
+func (d *dummyAnalyzer) DetectCrash(*interfaces.ExecutionResult) (*interfaces.CrashInfo, error) {
+	return nil, nil
+}
+func (d *dummyAnalyzer) DetectHang(*interfaces.ExecutionResult) (*interfaces.HangInfo, error) {
+	return nil, nil
+}
+func (d *dummyAnalyzer) Reset() error { return nil }
+
+type dummyMutator struct{}
+
+func (d *dummyMutator) Mutate(tc *interfaces.TestCase) (*interfaces.TestCase, error) { return tc, nil }
+func (d *dummyMutator) Name() string                                                 { return "dummy" }
+func (d *dummyMutator) Description() string                                          { return "dummy mutator" }

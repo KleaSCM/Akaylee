@@ -19,6 +19,7 @@ import (
 	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -237,7 +238,7 @@ func TestWorkerCreation(t *testing.T) {
 		executor := core.NewAdapterExecutor(execution.NewProcessExecutor())
 		analyzer := core.NewAdapterAnalyzer(analysis.NewCoverageAnalyzer())
 
-		worker := core.NewWorker(1, executor, analyzer, nil)
+		worker := core.NewWorker(1, executor, analyzer, logrus.New(), "TARGET/vulnscan")
 		assert.NotNil(t, worker)
 		assert.Equal(t, 1, worker.ID)
 		assert.False(t, worker.IsRunning())
@@ -251,7 +252,7 @@ func TestWorkerExecution(t *testing.T) {
 		executor := core.NewAdapterExecutor(execution.NewProcessExecutor())
 		analyzer := core.NewAdapterAnalyzer(analysis.NewCoverageAnalyzer())
 
-		worker := core.NewWorker(1, executor, analyzer, nil)
+		worker := core.NewWorker(1, executor, analyzer, logrus.New(), "TARGET/vulnscan")
 
 		testCase := &core.TestCase{
 			ID:   "test1",
