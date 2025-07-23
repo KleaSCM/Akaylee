@@ -61,6 +61,7 @@ type LoggerConfig struct {
 	SyslogAddress   string `json:"syslog_address"`
 	JournaldEnabled bool   `json:"journald_enabled"`
 	// GRPCSinkEnabled bool   `json:"grpc_sink_enabled"` // Stub for now
+	Target string `json:"target"` // Added for target-specific logging
 }
 
 // Validate checks the LoggerConfig for invalid or missing values.
@@ -225,15 +226,39 @@ func (l *Logger) setupFileOutput() error {
 		return nil
 	}
 
-	// Create output directory
-	if err := os.MkdirAll(l.config.OutputDir, 0755); err != nil {
+	// Determine target name for subdirectory (if available)
+	targetName := l.config.OutputDir
+	if l.config.Target != "" {
+		// Extract base name without extension or path
+		base := filepath.Base(l.config.Target)
+		if ext := filepath.Ext(base); ext != "" {
+			base = base[:len(base)-len(ext)]
+		}
+		targetName = filepath.Join(l.config.OutputDir, base)
+	}
+
+	// Create output directory (with target subdirectory)
+	if err := os.MkdirAll(targetName, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
-	// Generate filename with timestamp
+	// Generate filename with timestamp and target name
+	targetBase := ""
+	if l.config.Target != "" {
+		base := filepath.Base(l.config.Target)
+		if ext := filepath.Ext(base); ext != "" {
+			base = base[:len(base)-len(ext)]
+		}
+		targetBase = base
+	}
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := fmt.Sprintf("akaylee-fuzzer_%s.log", timestamp)
-	filepath := filepath.Join(l.config.OutputDir, filename)
+	filename := ""
+	if targetBase != "" {
+		filename = fmt.Sprintf("akaylee-fuzzer_%s_%s.log", targetBase, timestamp)
+	} else {
+		filename = fmt.Sprintf("akaylee-fuzzer_%s.log", timestamp)
+	}
+	filepath := filepath.Join(targetName, filename)
 
 	// Open log file
 	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -293,7 +318,18 @@ func (l *Logger) cleanup() error {
 		return nil
 	}
 
-	files, err := filepath.Glob(filepath.Join(l.config.OutputDir, "akaylee-fuzzer_*.log"))
+	// Determine target name for subdirectory (if available)
+	targetName := l.config.OutputDir
+	if l.config.Target != "" {
+		// Extract base name without extension or path
+		base := filepath.Base(l.config.Target)
+		if ext := filepath.Ext(base); ext != "" {
+			base = base[:len(base)-len(ext)]
+		}
+		targetName = filepath.Join(l.config.OutputDir, base)
+	}
+
+	files, err := filepath.Glob(filepath.Join(targetName, "akaylee-fuzzer_*.log"))
 	if err != nil {
 		return err
 	}

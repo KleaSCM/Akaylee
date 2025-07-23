@@ -11,11 +11,14 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"crypto/sha256"
@@ -24,6 +27,7 @@ import (
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/coverage"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
+	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/sirupsen/logrus"
 )
 
@@ -68,6 +72,12 @@ type Engine struct {
 	seenCoverageHashes     map[string]bool                  // To avoid duplicate coverage
 	reporters              []Reporter                       // Registered reporters for telemetry
 	reproducibilityHarness *analysis.ReproducibilityHarness // Crash reproduction and analysis
+
+	// Report data
+	crashResults       []*ExecutionResult
+	hangResults        []*ExecutionResult
+	interestingResults []*ExecutionResult
+	reportWritten      bool
 }
 
 // NewEngine creates a new fuzzer engine instance
@@ -81,6 +91,9 @@ func NewEngine() *Engine {
 		corpus:             NewCorpus(10000),       // Default max size
 		scheduler:          NewPriorityScheduler(), // Default to priority scheduler
 		seenCoverageHashes: make(map[string]bool),
+		crashResults:       make([]*ExecutionResult, 0),
+		hangResults:        make([]*ExecutionResult, 0),
+		interestingResults: make([]*ExecutionResult, 0),
 	}
 }
 
@@ -208,10 +221,24 @@ func (e *Engine) GetReproducibilityHarness() *analysis.ReproducibilityHarness {
 
 // setupLogging configures the logging system based on configuration
 func (e *Engine) setupLogging() {
-	// Use default logging since config doesn't have log fields
-	level := logrus.InfoLevel
-	e.logger.SetLevel(level)
-	e.logger.SetFormatter(&logrus.TextFormatter{})
+	// Use LoggerConfig to set up per-target logging
+	loggerConfig := &logging.LoggerConfig{
+		Level:     logging.LogLevelInfo,
+		Format:    logging.LogFormatCustom,
+		OutputDir: "./logs",
+		MaxFiles:  10,
+		MaxSize:   100 * 1024 * 1024, // 100MB
+		Timestamp: true,
+		Caller:    true,
+		Colors:    true,
+		Compress:  false,
+		Target:    e.config.Target, // Pass the target name for subdirectory
+	}
+	logger, err := logging.NewLogger(loggerConfig)
+	if err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
+	e.logger = logger.GetLogger()
 }
 
 // initializeCorpus loads the initial seed corpus from the configured directory
@@ -274,7 +301,7 @@ func (e *Engine) initializeWorkers() {
 	e.workerPool = make(chan *Worker, numWorkers)
 
 	for i := 0; i < numWorkers; i++ {
-		worker := NewWorker(i, e.executor, e.analyzer, e.logger)
+		worker := NewWorker(i, e.executor, e.analyzer, e.logger, e.config.Target)
 		e.workers[i] = worker
 		e.workerPool <- worker
 	}
@@ -312,6 +339,32 @@ func (e *Engine) Start() error {
 	e.wg.Add(1)
 	go e.runScheduler()
 
+	// Add a helper to write the report (so it can be called from defer/recover)
+	defaultLogger := e.logger
+	// Defer report writing and panic recovery
+
+	defer func() {
+		if r := recover(); r != nil {
+			defaultLogger.Errorf("Fuzzer panicked: %v", r)
+		}
+		if !e.reportWritten {
+			e.writeReport()
+			e.reportWritten = true
+		}
+	}()
+	// Handle SIGINT/SIGTERM to write report on exit
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		defaultLogger.Warn("Received interrupt signal, writing report and exiting...")
+		if !e.reportWritten {
+			e.writeReport()
+			e.reportWritten = true
+		}
+		os.Exit(1)
+	}()
+
 	e.logger.Info("Fuzzer engine started successfully")
 	return nil
 }
@@ -338,6 +391,12 @@ func (e *Engine) Stop() error {
 	// Cleanup executor
 	if e.executor != nil {
 		e.executor.Cleanup()
+	}
+
+	// Write report to fuzz_output
+	if !e.reportWritten {
+		e.writeReport()
+		e.reportWritten = true
 	}
 
 	e.logger.Info("Fuzzer engine stopped successfully")
@@ -528,19 +587,17 @@ func (e *Engine) processResult(result *ExecutionResult) {
 
 	// Handle crashes
 	if result.Status == StatusCrash {
-		e.handleCrash(result)
-		testCase.Metadata["found_crash"] = true
+		e.crashResults = append(e.crashResults, result)
 	}
 
 	// Handle hangs
 	if result.Status == StatusHang {
-		e.handleHang(result)
+		e.hangResults = append(e.hangResults, result)
 	}
 
 	// Check if test case is interesting (new coverage or analyzer says so)
 	if newCoverage || e.analyzer.IsInteresting(testCase) {
-		testCase.Priority = e.calculatePriority(testCase) + 100 // Boost for new coverage
-		e.scheduler.Push(testCase)
+		e.interestingResults = append(e.interestingResults, result)
 	}
 
 	// Notify reporters of execution
@@ -779,4 +836,47 @@ func coverageHash(profile string) string {
 	h := sha256.New()
 	h.Write([]byte(profile))
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// Add a helper to write the report (so it can be called from defer/recover)
+func (e *Engine) writeReport() {
+	reportDir := "./fuzz_output"
+	os.MkdirAll(reportDir, 0755)
+	reportBase := filepath.Join(reportDir, fmt.Sprintf("%s_%s", filepath.Base(e.config.Target), time.Now().Format("2006-01-02_15-04-05")))
+	jsonReport := map[string]interface{}{
+		"target":              e.config.Target,
+		"start_time":          e.stats.StartTime,
+		"end_time":            time.Now(),
+		"executions":          e.stats.Executions,
+		"crashes":             len(e.crashResults),
+		"hangs":               len(e.hangResults),
+		"unique_crashes":      e.stats.UniqueCrashes,
+		"coverage_edges":      e.stats.CoverageEdges,
+		"coverage_blocks":     e.stats.CoverageBlocks,
+		"crash_results":       e.crashResults,
+		"hang_results":        e.hangResults,
+		"interesting_results": e.interestingResults,
+	}
+	jsonFile, _ := os.Create(reportBase + ".json")
+	json.NewEncoder(jsonFile).Encode(jsonReport)
+	jsonFile.Close()
+	htmlFile, _ := os.Create(reportBase + ".html")
+	htmlFile.WriteString("<html><head><title>Akaylee Fuzzer Report</title></head><body>")
+	htmlFile.WriteString(fmt.Sprintf("<h1>Akaylee Fuzzer Report for %s</h1>", e.config.Target))
+	htmlFile.WriteString(fmt.Sprintf("<p>Start: %s<br>End: %s</p>", e.stats.StartTime, time.Now()))
+	htmlFile.WriteString(fmt.Sprintf("<p>Executions: %d<br>Crashes: %d<br>Hangs: %d<br>Unique Crashes: %d<br>Coverage Edges: %d<br>Coverage Blocks: %d</p>", e.stats.Executions, len(e.crashResults), len(e.hangResults), e.stats.UniqueCrashes, e.stats.CoverageEdges, e.stats.CoverageBlocks))
+	htmlFile.WriteString("<h2>Crashes</h2><ul>")
+	for _, r := range e.crashResults {
+		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
+	}
+	htmlFile.WriteString("</ul><h2>Hangs</h2><ul>")
+	for _, r := range e.hangResults {
+		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
+	}
+	htmlFile.WriteString("</ul><h2>Interesting Results</h2><ul>")
+	for _, r := range e.interestingResults {
+		htmlFile.WriteString(fmt.Sprintf("<li>ID: %s<br>Status: %d<br>Error: %s<br>Input: %x</li>", r.TestCaseID, r.Status, string(r.Error), r.Output))
+	}
+	htmlFile.WriteString("</ul></body></html>")
+	htmlFile.Close()
 }

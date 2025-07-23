@@ -27,6 +27,9 @@ type Worker struct {
 	analyzer Analyzer       // Result analyzer
 	logger   *logrus.Logger // Worker-specific logger
 
+	// Add target name for logging
+	Target string // Target name for logging
+
 	// Performance tracking
 	executions int64     // Number of test cases executed
 	crashes    int64     // Number of crashes found
@@ -49,7 +52,7 @@ type Worker struct {
 
 // NewWorker creates a new worker instance
 // Initializes all components for test case execution
-func NewWorker(id int, executor Executor, analyzer Analyzer, logger *logrus.Logger) *Worker {
+func NewWorker(id int, executor Executor, analyzer Analyzer, logger *logrus.Logger, target string) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Worker{
@@ -57,6 +60,7 @@ func NewWorker(id int, executor Executor, analyzer Analyzer, logger *logrus.Logg
 		executor:  executor,
 		analyzer:  analyzer,
 		logger:    logger,
+		Target:    target,
 		startTime: time.Now(),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -102,6 +106,14 @@ func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 		result.Status = StatusError
 		result.Error = []byte(err.Error())
 		result.Duration = time.Since(startTime)
+		// Add target and test name to log fields
+		fields := map[string]interface{}{
+			"target": w.Target,
+		}
+		if name, ok := testCase.Metadata["name"]; ok {
+			fields["test_name"] = name
+		}
+		w.logger.WithFields(fields).Errorf("Execution failed: %v", err)
 		return result, fmt.Errorf("execution failed: %w", err)
 	}
 
@@ -118,9 +130,18 @@ func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 	result.Output = execResult.Output
 	result.Error = execResult.Error
 
+	// Add target and test name to log fields for execution
+	fields := map[string]interface{}{
+		"target": w.Target,
+	}
+	if name, ok := testCase.Metadata["name"]; ok {
+		fields["test_name"] = name
+	}
+	w.logger.WithFields(fields).Info("Test case executed")
+
 	// Analyze the result
 	if err := w.analyzer.Analyze(result); err != nil {
-		w.logger.Errorf("Worker %d: Failed to analyze result: %v", w.ID, err)
+		w.logger.WithFields(fields).Errorf("Worker %d: Failed to analyze result: %v", w.ID, err)
 	}
 
 	// Detect crashes
@@ -130,7 +151,7 @@ func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 		w.mu.Lock()
 		w.crashes++
 		w.mu.Unlock()
-		w.logger.Warnf("Worker %d: Crash detected: %s", w.ID, crashInfo.Type)
+		w.logger.WithFields(fields).Warnf("Worker %d: Crash detected: %s", w.ID, crashInfo.Type)
 	}
 
 	// Detect hangs
@@ -140,7 +161,7 @@ func (w *Worker) Execute(testCase *TestCase) (*ExecutionResult, error) {
 		w.mu.Lock()
 		w.hangs++
 		w.mu.Unlock()
-		w.logger.Warnf("Worker %d: Hang detected: duration=%v", w.ID, hangInfo.Duration)
+		w.logger.WithFields(fields).Warnf("Worker %d: Hang detected", w.ID)
 	}
 
 	// Update resource tracking
