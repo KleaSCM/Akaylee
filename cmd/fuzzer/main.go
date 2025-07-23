@@ -267,6 +267,49 @@ exploitability assessment, and minimal test case generation. Essential for secur
 
 	rootCmd.AddCommand(reproduceCmd)
 
+	// Add differential fuzzing command
+	differentialCmd := &cobra.Command{
+		Use:   "differential",
+		Short: "Perform differential fuzzing on multiple implementations",
+		Long: `Compare multiple implementations of the same target to detect behavioral
+differences, crashes, and security vulnerabilities. Essential for finding
+implementation bugs and security issues through divergence analysis.`,
+		RunE: commands.PerformDifferentialFuzzing,
+	}
+
+	// Add differential flags
+	differentialCmd.Flags().StringSlice("implementations", []string{}, "Implementations to compare (format: name:path[:args])")
+	differentialCmd.Flags().Duration("timeout", 30*time.Second, "Execution timeout per test case")
+	differentialCmd.Flags().Int("max-differences", 1000, "Maximum differences to collect")
+	differentialCmd.Flags().String("output-dir", "./differential_output", "Output directory for reports")
+	differentialCmd.Flags().Int("repro-attempts", 5, "Number of reproduction attempts")
+	differentialCmd.Flags().Float64("min-confidence", 0.7, "Minimum confidence threshold")
+	differentialCmd.Flags().Bool("enable-detailed", true, "Enable detailed analysis")
+	differentialCmd.Flags().Bool("compare-output", true, "Compare output differences")
+	differentialCmd.Flags().Bool("compare-error", true, "Compare error output differences")
+	differentialCmd.Flags().Bool("compare-coverage", false, "Compare coverage differences")
+	differentialCmd.Flags().Bool("compare-timing", true, "Compare timing differences")
+	differentialCmd.Flags().Bool("compare-resources", true, "Compare resource usage differences")
+
+	// Mark required flags
+	differentialCmd.MarkFlagRequired("implementations")
+
+	// Bind flags to viper
+	viper.BindPFlag("differential.implementations", differentialCmd.Flags().Lookup("implementations"))
+	viper.BindPFlag("differential.timeout", differentialCmd.Flags().Lookup("timeout"))
+	viper.BindPFlag("differential.max_differences", differentialCmd.Flags().Lookup("max-differences"))
+	viper.BindPFlag("differential.output_dir", differentialCmd.Flags().Lookup("output-dir"))
+	viper.BindPFlag("differential.repro_attempts", differentialCmd.Flags().Lookup("repro-attempts"))
+	viper.BindPFlag("differential.min_confidence", differentialCmd.Flags().Lookup("min-confidence"))
+	viper.BindPFlag("differential.enable_detailed", differentialCmd.Flags().Lookup("enable-detailed"))
+	viper.BindPFlag("differential.compare_output", differentialCmd.Flags().Lookup("compare-output"))
+	viper.BindPFlag("differential.compare_error", differentialCmd.Flags().Lookup("compare-error"))
+	viper.BindPFlag("differential.compare_coverage", differentialCmd.Flags().Lookup("compare-coverage"))
+	viper.BindPFlag("differential.compare_timing", differentialCmd.Flags().Lookup("compare-timing"))
+	viper.BindPFlag("differential.compare_resources", differentialCmd.Flags().Lookup("compare-resources"))
+
+	rootCmd.AddCommand(differentialCmd)
+
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)
 

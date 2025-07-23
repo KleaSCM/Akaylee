@@ -29,7 +29,7 @@ Akaylee Fuzzer TODO
 [x] Advanced input structure inference (grammar-based, protocol-aware)
 [x] Crash triage and minimization
 [x] Reproducibility harness (auto-replay of crashes)
-[ ] Differential fuzzing (compare multiple implementations)
+[x] Differential fuzzing (compare multiple implementations)
 [ ] State-aware fuzzing (for stateful targets)
 [ ] In-depth reporting (HTML, dashboards, etc.)
 [ ] CI/CD integration for automated regression fuzzing
