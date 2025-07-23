@@ -372,8 +372,32 @@ func (e *Engine) Start() error {
 
 	e.logger.Info("Fuzzer engine started successfully")
 
-	// Block until shutdown is complete
-	<-e.Done
+	// Add a global timeout (5 minutes)
+	timeout := 5 * time.Minute
+	timeoutChan := time.After(timeout)
+	shutdown := false
+
+	// Block until shutdown is complete or timeout
+	select {
+	case <-e.Done:
+		// Normal shutdown
+	case <-timeoutChan:
+		shutdown = true
+		e.logger.Warnf("[TIMEOUT] Fuzzer exceeded %v, forcing shutdown!", timeout)
+		e.Stop()
+		// Wait up to 10 seconds for shutdown
+		done := make(chan struct{})
+		go func() {
+			<-e.Done
+			close(done)
+		}()
+		select {
+		case <-done:
+			// Shutdown complete
+		case <-time.After(10 * time.Second):
+			e.logger.Fatalf("[TIMEOUT] Workers did not exit after 10s, forcing report write!")
+		}
+	}
 
 	// Write report after shutdown
 	if !e.reportWritten && e.stats.Executions > 0 {
@@ -384,6 +408,9 @@ func (e *Engine) Start() error {
 		}()
 		e.writeReport()
 		e.reportWritten = true
+	}
+	if shutdown {
+		return fmt.Errorf("fuzzer timed out after %v", timeout)
 	}
 	return nil
 }
