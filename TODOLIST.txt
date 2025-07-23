@@ -30,16 +30,14 @@ Akaylee Fuzzer TODO
 [x] Crash triage and minimization
 [x] Reproducibility harness (auto-replay of crashes)
 [x] Differential fuzzing (compare multiple implementations)
-[ ] State-aware fuzzing (for stateful targets)
+[x] State-aware fuzzing (for stateful targets)
+[ ] API fuzzing - Network and HTTP target support
 [ ] In-depth reporting (HTML, dashboards, etc.)
 [ ] CI/CD integration for automated regression fuzzing
 [ ] Advanced resource monitoring (CPU/mem per test)
 [ ] Seed corpus auto-expansion (from real-world data)
 [ ] Fuzzing for non-binary targets (APIs, network, etc.)
 [ ] Future Option: Plugin Support (.so plugins for mutators and execution strategies)
-
-
-
 
 
 
