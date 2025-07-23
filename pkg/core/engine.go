@@ -30,6 +30,7 @@ type Engine struct {
 	corpus        *Corpus
 	queue         *PriorityQueue
 	worker        *Worker
+	workers       []*Worker
 	stats         *FuzzerStats
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
@@ -102,91 +103,103 @@ func (e *Engine) Start() error {
 		return fmt.Errorf("engine already started")
 	}
 	e.started = true
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
-		var results []map[string]interface{}
-		e.reportResults = &results
-		defer func() {
-			e.reportOnce.Do(func() {
-				fmt.Printf("[Engine] writeReports() called from goroutine defer\n")
-				e.writeReports()
-			})
-		}()
-		files, _ := ioutil.ReadDir(e.config.CorpusDir)
-		for _, file := range files {
-			if file.IsDir() {
-				continue
-			}
-			path := e.config.CorpusDir + "/" + file.Name()
-			data, err := ioutil.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			// Mutate the test case before execution
-			orig := &TestCase{
-				ID:         file.Name(),
-				Data:       data,
-				ParentID:   "",
-				Generation: 0,
-				CreatedAt:  time.Now(),
-				Priority:   100,
-				Metadata:   make(map[string]interface{}),
-			}
-			mutated := orig
-			if e.mutator != nil {
-				m, err := e.mutator.Mutate(orig)
-				if err == nil && m != nil {
-					fmt.Printf("[Engine] Mutated test case %s using %s\n", orig.ID, e.mutator.Name())
-					if e.logger != nil {
-						e.logger.LogMutation(orig.ID, m.ID, e.mutator.Name(), nil)
-					}
-					mutated = m
-				} else {
-					fmt.Printf("[Engine] Mutation failed for %s: %v\n", orig.ID, err)
+	workerCount := e.config.Workers
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+	e.workers = make([]*Worker, workerCount)
+	// Load corpus into queue
+	files, _ := ioutil.ReadDir(e.config.CorpusDir)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		path := e.config.CorpusDir + "/" + file.Name()
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		orig := &TestCase{
+			ID:         file.Name(),
+			Data:       data,
+			ParentID:   "",
+			Generation: 0,
+			CreatedAt:  time.Now(),
+			Priority:   100,
+			Metadata:   make(map[string]interface{}),
+		}
+		e.queue.Put(orig)
+	}
+	var resultsMu sync.Mutex
+	var results []map[string]interface{}
+	e.reportResults = &results
+	e.stopCh = make(chan struct{})
+	e.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func(workerID int) {
+			defer e.wg.Done()
+			for {
+				select {
+				case <-e.stopCh:
+					return
+				default:
 				}
-			}
-			cmd := exec.Command(e.config.Target, "--fuzz")
-			cmd.Stdin = bytes.NewReader(mutated.Data)
-			start := time.Now()
-			out, err := cmd.CombinedOutput()
-			dur := time.Since(start)
-			status := "ok"
-			if err != nil {
-				status = "crash"
-				e.stats.Crashes++
+				tc := e.queue.Get()
+				if tc == nil {
+					time.Sleep(50 * time.Millisecond)
+					continue
+				}
+				mutated := tc
+				if e.mutator != nil {
+					m, err := e.mutator.Mutate(tc)
+					if err == nil && m != nil {
+						if e.logger != nil {
+							e.logger.LogMutation(tc.ID, m.ID, e.mutator.Name(), nil)
+						}
+						mutated = m
+					}
+				}
+				cmd := exec.Command(e.config.Target, "--fuzz")
+				cmd.Stdin = bytes.NewReader(mutated.Data)
+				start := time.Now()
+				out, err := cmd.CombinedOutput()
+				dur := time.Since(start)
+				status := "ok"
+				if err != nil {
+					status = "crash"
+					if e.logger != nil {
+						e.logger.LogCrash(mutated.ID, "process error", map[string]interface{}{
+							"error": fmt.Sprintf("%v", err),
+						})
+					}
+				}
 				if e.logger != nil {
-					e.logger.LogCrash(mutated.ID, "process error", map[string]interface{}{
-						"error": fmt.Sprintf("%v", err),
+					e.logger.LogExecution(mutated.ID, dur, status, map[string]interface{}{
+						"output": string(out),
+						"error":  fmt.Sprintf("%v", err),
 					})
 				}
-			}
-			e.stats.Executions++
-			if e.logger != nil {
-				e.logger.LogExecution(mutated.ID, dur, status, map[string]interface{}{
-					"output": string(out),
-					"error":  fmt.Sprintf("%v", err),
+				resultsMu.Lock()
+				results = append(results, map[string]interface{}{
+					"test_case": mutated.ID,
+					"status":    status,
+					"duration":  dur.String(),
+					"output":    string(out),
+					"error":     fmt.Sprintf("%v", err),
 				})
+				resultsMu.Unlock()
+				e.stats.Executions++
+				if status == "crash" {
+					e.stats.Crashes++
+				}
 			}
-			fmt.Printf("[Engine] Test: %s | Status: %s | Duration: %s\nOutput: %s\n", mutated.ID, status, dur, string(out))
-			results = append(results, map[string]interface{}{
-				"test_case": mutated.ID,
-				"status":    status,
-				"duration":  dur.String(),
-				"output":    string(out),
-				"error":     fmt.Sprintf("%v", err),
-			})
-			time.Sleep(100 * time.Millisecond)
-			select {
-			case <-e.stopCh:
-				return
-			default:
-			}
-		}
-		// At the end of the goroutine, log stats
-		if e.logger != nil {
-			e.logger.LogStats(e.stats.Executions, e.stats.Crashes, 0, float64(e.stats.Executions)/float64(time.Since(e.stats.StartTime).Seconds()), nil)
-		}
+		}(i)
+	}
+	go func() {
+		e.wg.Wait()
+		e.reportOnce.Do(func() {
+			e.writeReports()
+		})
 	}()
 	return nil
 }
@@ -199,7 +212,6 @@ func (e *Engine) Stop() error {
 	close(e.stopCh)
 	e.wg.Wait()
 	e.reportOnce.Do(func() {
-		fmt.Printf("[Engine] writeReports() called from Stop()\n")
 		e.writeReports()
 	})
 	e.started = false

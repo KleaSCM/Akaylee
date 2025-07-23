@@ -23,6 +23,7 @@ func main() {
 		CorpusDir:     "TARGET/corpus/split",
 		OutputDir:     "fuzz_output",
 		MaxCorpusSize: 1000,
+		Workers:       4,
 	}
 	// Create a BitFlipMutator with 1% mutation rate
 	bitFlip := strategies.NewBitFlipMutator(0.01)
