@@ -468,6 +468,7 @@ func (e *Engine) runWorker(worker *Worker) {
 // runScheduler manages the test case queue and scheduling
 // Implements intelligent scheduling algorithms for optimal coverage
 func (e *Engine) runScheduler() {
+	e.wg.Done()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
