@@ -8,12 +8,10 @@ Description: Minimal modular engine implementation for the Akaylee Fuzzer. Imple
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -39,6 +37,8 @@ type Engine struct {
 	reportResults *[]map[string]interface{}
 	mutator       Mutator
 	logger        *logging.Logger
+	executor      Executor
+	analyzer      Analyzer
 }
 
 // NewEngine creates a new modular engine instance
@@ -50,14 +50,20 @@ func NewEngine() *Engine {
 }
 
 // Initialize sets up the engine with the given configuration
-func (e *Engine) Initialize(config *FuzzerConfig, mutator Mutator, logger *logging.Logger) error {
+func (e *Engine) Initialize(config *FuzzerConfig, mutator Mutator, logger *logging.Logger, executor Executor, analyzer Analyzer) error {
 	e.config = config
 	e.corpus = NewCorpus(config.MaxCorpusSize)
 	e.queue = NewPriorityQueue()
 	e.mutator = mutator
 	e.logger = logger
-	// For now, create a dummy worker (no executor/analyzer yet)
-	e.worker = nil // Will be set in Start when executor/analyzer are available
+	e.executor = executor
+	e.analyzer = analyzer
+	e.worker = nil // Will be set in Start
+	if e.executor != nil {
+		if err := e.executor.Initialize(config); err != nil {
+			return fmt.Errorf("executor initialization failed: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -86,13 +92,55 @@ func (e *Engine) writeReports() {
 		fmt.Printf("[Engine] Error creating HTML report: %v\n", err)
 	} else {
 		defer f.Close()
-		f.WriteString("<html><head><title>Akaylee Modular Fuzz Report</title><style>body{font-family:sans-serif;}table{border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px;}th{background:#eee;}tr.crash{background:#fdd;}tr.ok{background:#dfd;}</style></head><body>")
-		f.WriteString("<h1>Akaylee Modular Fuzz Report</h1><table><tr><th>Test Case</th><th>Status</th><th>Duration</th><th>Error</th><th>Output</th></tr>")
+		total := len(results)
+		crashes := 0
+		hangs := 0
+		for _, r := range results {
+			if r["status"] == "crash" {
+				crashes++
+			}
+			if r["status"] == "hang" {
+				hangs++
+			}
+		}
+		f.WriteString(`<html><head><title>Akaylee Modular Fuzz Report</title><style>
+body{font-family:sans-serif;background:#fafbfc;}
+table{border-collapse:collapse;width:100%;margin-top:1em;}
+th,td{border:1px solid #ccc;padding:6px 8px;}
+th{background:#eee;position:sticky;top:0;z-index:2;}
+tr:nth-child(even){background:#f6f8fa;}
+tr:nth-child(odd){background:#fff;}
+tr.crash{background:#ffeaea;}
+tr.hang{background:#fffbe6;}
+tr.ok{background:#eaffea;}
+.mono{font-family:monospace;font-size:0.95em;white-space:pre-wrap;word-break:break-all;}
+.summary{margin-top:1em;margin-bottom:1em;padding:1em;background:#e0e7ff;border-radius:8px;}
+@media (max-width: 800px) { th,td{font-size:0.95em;padding:4px;} }
+</style></head><body>`)
+		f.WriteString(`<h1>Akaylee Modular Fuzz Report</h1>`)
+		f.WriteString(fmt.Sprintf(`<div class='summary'><b>Total:</b> %d &nbsp; <b>Crashes:</b> %d &nbsp; <b>Hangs:</b> %d</div>`, total, crashes, hangs))
+		f.WriteString(`<table><tr><th>Test Case</th><th>Status</th><th>Duration</th><th>Error</th><th>Output</th></tr>`)
 		for _, r := range results {
 			rowClass := r["status"].(string)
-			f.WriteString(fmt.Sprintf("<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><pre>%s</pre></td></tr>", rowClass, r["test_case"], r["status"], r["duration"], r["error"], htmlEscape(r["output"].(string))))
+			errStr := r["error"].(string)
+			if errStr == "<nil>" || errStr == "" {
+				errStr = "—"
+			}
+			outputStr := htmlEscape(r["output"].(string))
+			if len(outputStr) > 120 {
+				outputStr = fmt.Sprintf(`<details><summary>Show (%d chars)</summary><div class='mono'>%s</div></details>`, len(r["output"].(string)), outputStr)
+			} else {
+				outputStr = fmt.Sprintf(`<div class='mono'>%s</div>`, outputStr)
+			}
+			errHtml := htmlEscape(errStr)
+			if len(errStr) > 80 {
+				errHtml = fmt.Sprintf(`<details><summary>Show (%d chars)</summary><div class='mono'>%s</div></details>`, len(errStr), errHtml)
+			} else {
+				errHtml = fmt.Sprintf(`<div class='mono'>%s</div>`, errHtml)
+			}
+			f.WriteString(fmt.Sprintf(`<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`, rowClass, r["test_case"], r["status"], r["duration"], errHtml, outputStr))
 		}
-		f.WriteString("</table></body></html>")
+		f.WriteString(`</table></body></html>`)
 		fmt.Printf("[Engine] HTML report written: %s\n", htmlPath)
 	}
 }
@@ -159,12 +207,21 @@ func (e *Engine) Start() error {
 						mutated = m
 					}
 				}
-				cmd := exec.Command(e.config.Target, "--fuzz")
-				cmd.Stdin = bytes.NewReader(mutated.Data)
-				start := time.Now()
-				out, err := cmd.CombinedOutput()
-				dur := time.Since(start)
+				// Use modular executor and analyzer
+				var execResult *ExecutionResult
+				var err error
+				if e.executor != nil {
+					execResult, err = e.executor.Execute(mutated)
+				} else {
+					err = fmt.Errorf("no executor configured")
+				}
+				dur := time.Duration(0)
 				status := "ok"
+				out := []byte{}
+				if execResult != nil {
+					dur = execResult.Duration
+					out = execResult.Output
+				}
 				if err != nil {
 					status = "crash"
 					if e.logger != nil {
@@ -178,6 +235,11 @@ func (e *Engine) Start() error {
 						"output": string(out),
 						"error":  fmt.Sprintf("%v", err),
 					})
+				}
+				// Analyze result if analyzer is present
+				if e.analyzer != nil && execResult != nil {
+					_ = e.analyzer.Analyze(execResult)
+					// Optionally: detect crash/hang, update stats
 				}
 				resultsMu.Lock()
 				results = append(results, map[string]interface{}{

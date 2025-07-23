@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
 	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
 )
@@ -46,8 +48,11 @@ func main() {
 		panic(err)
 	}
 	defer logger.Close()
+	// Create modular executor and analyzer
+	executor := core.NewAdapterExecutor(execution.NewProcessExecutor())
+	analyzer := core.NewAdapterAnalyzer(analysis.NewCoverageAnalyzer())
 	engine := core.NewEngine()
-	if err := engine.Initialize(config, mutator, logger); err != nil {
+	if err := engine.Initialize(config, mutator, logger, executor, analyzer); err != nil {
 		panic(err)
 	}
 	if err := engine.Start(); err != nil {
