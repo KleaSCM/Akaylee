@@ -349,7 +349,7 @@ func (e *Engine) Start() error {
 		if r := recover(); r != nil {
 			defaultLogger.Errorf("Fuzzer panicked: %v", r)
 		}
-		if !e.reportWritten {
+		if !e.reportWritten && e.stats.Executions > 0 {
 			e.writeReport()
 			e.reportWritten = true
 		}
@@ -397,6 +397,11 @@ func (e *Engine) Stop() error {
 
 	// Write report to fuzz_output
 	if !e.reportWritten {
+		defer func() {
+			if r := recover(); r != nil {
+				e.logger.Fatalf("[STOP] Report writing panicked: %v", r)
+			}
+		}()
 		e.writeReport()
 		e.reportWritten = true
 	}
@@ -439,6 +444,13 @@ func (e *Engine) runWorker(worker *Worker) {
 
 			// Update statistics
 			e.stats.IncrementExecutions()
+
+			// Auto-stop after max executions
+			if e.config.MaxExecutions > 0 && e.stats.Executions >= e.config.MaxExecutions {
+				e.logger.Warnf("Max executions reached (%d), stopping engine...", e.config.MaxExecutions)
+				go e.Stop()
+				return
+			}
 		}
 	}
 }
@@ -847,9 +859,14 @@ func coverageHash(profile string) string {
 
 // Add a helper to write the report (so it can be called from defer/recover)
 func (e *Engine) writeReport() {
+	e.logger.Warn("[REPORT] writeReport() called")
 	reportDir := "./fuzz_output"
 	os.MkdirAll(reportDir, 0755)
 	reportBase := filepath.Join(reportDir, fmt.Sprintf("%s_%s", filepath.Base(e.config.Target), time.Now().Format("2006-01-02_15-04-05")))
+	if e.stats.Executions == 0 {
+		e.logger.Fatalf("[REPORT] PANIC: e.stats.Executions is ZERO at report time!")
+		panic("[REPORT] e.stats.Executions is ZERO at report time!")
+	}
 	jsonReport := map[string]interface{}{
 		"target":              e.config.Target,
 		"start_time":          e.stats.StartTime,
@@ -864,10 +881,20 @@ func (e *Engine) writeReport() {
 		"hang_results":        e.hangResults,
 		"interesting_results": e.interestingResults,
 	}
-	jsonFile, _ := os.Create(reportBase + ".json")
-	json.NewEncoder(jsonFile).Encode(jsonReport)
+	jsonFile, err := os.Create(reportBase + ".json")
+	if err != nil {
+		e.logger.Fatalf("[REPORT] Failed to create JSON report file: %v", err)
+		return
+	}
+	if err := json.NewEncoder(jsonFile).Encode(jsonReport); err != nil {
+		e.logger.Fatalf("[REPORT] Failed to encode JSON report: %v", err)
+	}
 	jsonFile.Close()
-	htmlFile, _ := os.Create(reportBase + ".html")
+	htmlFile, err := os.Create(reportBase + ".html")
+	if err != nil {
+		e.logger.Fatalf("[REPORT] Failed to create HTML report file: %v", err)
+		return
+	}
 	htmlFile.WriteString("<html><head><title>Akaylee Fuzzer Report</title></head><body>")
 	htmlFile.WriteString(fmt.Sprintf("<h1>Akaylee Fuzzer Report for %s</h1>", e.config.Target))
 	htmlFile.WriteString(fmt.Sprintf("<p>Start: %s<br>End: %s</p>", e.stats.StartTime, time.Now()))
@@ -886,6 +913,7 @@ func (e *Engine) writeReport() {
 	}
 	htmlFile.WriteString("</ul></body></html>")
 	htmlFile.Close()
+	e.logger.Warn("[REPORT] writeReport() complete")
 }
 
 // DoneChan returns the Done channel for engine completion notification

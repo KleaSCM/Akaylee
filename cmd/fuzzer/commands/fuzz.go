@@ -310,6 +310,10 @@ func printFinalStats(engine *core.Engine) {
 
 // createFuzzerConfig creates the fuzzer configuration from viper
 func createFuzzerConfig() *interfaces.FuzzerConfig {
+	maxExec := viper.GetInt64("max_executions")
+	if maxExec == 0 {
+		maxExec = 1000 // default if not set
+	}
 	return &interfaces.FuzzerConfig{
 		Target:        viper.GetString("target_path"),
 		CorpusDir:     viper.GetString("corpus_dir"),
@@ -325,6 +329,7 @@ func createFuzzerConfig() *interfaces.FuzzerConfig {
 		CoverageType:  viper.GetString("coverage_type"),
 		SchedulerType: viper.GetString("scheduler_type"),
 		SessionID:     viper.GetString("session_id"),
+		MaxExecutions: maxExec,
 	}
 }
 

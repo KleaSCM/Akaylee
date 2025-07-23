@@ -113,7 +113,8 @@ type FuzzerConfig struct {
 	Strategy      string        `json:"strategy"`
 	CoverageType  string        `json:"coverage_type"`
 	SchedulerType string        `json:"scheduler_type"`
-	SessionID     string        `json:"session_id"` // Persistent session UUID for correlation
+	SessionID     string        `json:"session_id"`     // Persistent session UUID for correlation
+	MaxExecutions int64         `json:"max_executions"` // Maximum number of executions before stopping
 }
 
 // Executor interface for executing test cases
