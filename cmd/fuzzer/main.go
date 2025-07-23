@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"github.com/kleascm/akaylee-fuzzer/cmd/fuzzer/commands"
+	"github.com/kleascm/akaylee-fuzzer/pkg/core"
+	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
+	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -172,6 +175,7 @@ generate and execute test cases, looking for crashes, hangs, and new coverage pa
 	fuzzCmd.Flags().StringVar(&targetPath, "target", "", "Path to target binary (required)")
 	fuzzCmd.Flags().StringSliceVar(&targetArgs, "args", []string{}, "Command-line arguments for target")
 	fuzzCmd.Flags().StringSliceVar(&targetEnv, "env", []string{}, "Environment variables for target")
+	fuzzCmd.Flags().BoolVar(&commands.UseMinimalEngine, "minimal-engine", false, "Use the minimal engine core (debug)")
 
 	fuzzCmd.Flags().IntVar(&workers, "workers", 0, "Number of parallel workers (0 = auto-detect)")
 	fuzzCmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Maximum execution time per test case")
@@ -387,6 +391,32 @@ visualizations. Perfect for sharing results and monitoring fuzzing progress.`,
 	viper.BindPFlag("dashboard.format", dashboardCmd.Flags().Lookup("format"))
 
 	rootCmd.AddCommand(dashboardCmd)
+
+	// Add fuzz-minimal command
+	fuzzMinimalCmd := &cobra.Command{
+		Use:   "fuzz-minimal",
+		Short: "Run the minimal engine core for direct, reliable fuzzing",
+		Long:  `Runs the new minimal engine core. No deadlocks, no stuck workers, just results.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			config := &interfaces.FuzzerConfig{
+				Target:        targetPath,
+				CorpusDir:     corpusDir,
+				OutputDir:     outputDir,
+				MaxCorpusSize: maxCorpusSize,
+			}
+			executor := execution.NewProcessExecutor()
+			executor.Initialize(config)
+			minimal := core.NewMinimalEngine(config, executor)
+			return minimal.Run()
+		},
+	}
+	fuzzMinimalCmd.Flags().StringVar(&targetPath, "target", "", "Path to target binary (required)")
+	fuzzMinimalCmd.Flags().StringVar(&corpusDir, "corpus", "", "Directory containing seed corpus (required)")
+	fuzzMinimalCmd.Flags().StringVar(&outputDir, "output", "./fuzz_output", "Directory for fuzzer output")
+	fuzzMinimalCmd.Flags().IntVar(&maxCorpusSize, "max-corpus-size", 10000, "Maximum number of test cases in corpus")
+	fuzzMinimalCmd.MarkFlagRequired("target")
+	fuzzMinimalCmd.MarkFlagRequired("corpus")
+	rootCmd.AddCommand(fuzzMinimalCmd)
 
 	// Add commands to root
 	rootCmd.AddCommand(fuzzCmd)

@@ -36,6 +36,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+var UseMinimalEngine bool
+
 // RunFuzz executes the main fuzzing process
 func RunFuzz(cmd *cobra.Command, args []string) error {
 	fmt.Println("🚀 Akaylee Fuzzer - Starting Fuzzing Session")

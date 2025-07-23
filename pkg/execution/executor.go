@@ -10,8 +10,10 @@ Handles process creation, monitoring, and cleanup with  reliability.
 package execution
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"sync"
@@ -50,6 +52,38 @@ func (e *ProcessExecutor) Initialize(config *interfaces.FuzzerConfig) error {
 // Execute runs a test case and returns the execution result
 // Handles process creation, monitoring, and result collection
 func (e *ProcessExecutor) Execute(testCase *interfaces.TestCase) (*interfaces.ExecutionResult, error) {
+	if strings.Contains(e.config.Target, "vulnscan") {
+		// Use HTTP POST to vulnscan server
+		port := os.Getenv("VULNSCAN_PORT")
+		if port == "" {
+			port = "6969"
+		}
+		url := "http://localhost:" + port + "/"
+		form := []byte("host=" + string(testCase.Data))
+		client := &http.Client{Timeout: 5 * time.Second}
+		start := time.Now()
+		resp, err := client.Post(url, "application/x-www-form-urlencoded", bytes.NewReader(form))
+		var output, errOutput []byte
+		status := interfaces.StatusSuccess
+		if err != nil {
+			status = interfaces.StatusCrash
+			errOutput = []byte(fmt.Sprintf("CONNECTION ERROR: %v", err))
+		} else {
+			output, _ = io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode >= 500 {
+				status = interfaces.StatusCrash
+				errOutput = []byte(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(output)))
+			}
+		}
+		return &interfaces.ExecutionResult{
+			TestCaseID: testCase.ID,
+			Duration:   time.Since(start),
+			Output:     output,
+			Error:      errOutput,
+			Status:     status,
+		}, nil
+	}
 	// Write input to temp file
 	tmpfile, err := os.CreateTemp("", "fuzzinput")
 	if err != nil {

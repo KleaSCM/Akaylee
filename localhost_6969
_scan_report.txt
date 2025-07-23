@@ -1,0 +1,27 @@
+Scan Report for Host: http://localhost:6969
+
+
+Open Ports:
+- Port 80: Open
+- Port 443: Open
+- Port 22: Open
+- Port 8080: Open
+
+Banner Information:
+
+HTTP Headers:
+- error: Failed to fetch http://localhost:6969
+: parse "http://localhost:6969\n": net/url: invalid control character in URL
+
+Crawl Results:
+- http://localhost:6969
+
+
+Security Vulnerabilities:
+
+SSL/TLS Information:
+- error: Error connecting to localhost:6969
+:443: dial tcp: address localhost:6969
+:443: too many colons in address
+
+Exposed Files:
