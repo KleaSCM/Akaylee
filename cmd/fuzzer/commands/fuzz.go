@@ -26,6 +26,7 @@ import (
 	"github.com/kleascm/akaylee-fuzzer/pkg/analysis"
 	"github.com/kleascm/akaylee-fuzzer/pkg/core"
 	"github.com/kleascm/akaylee-fuzzer/pkg/execution"
+	"github.com/kleascm/akaylee-fuzzer/pkg/expansion"
 	"github.com/kleascm/akaylee-fuzzer/pkg/grammar"
 	"github.com/kleascm/akaylee-fuzzer/pkg/interfaces"
 	"github.com/kleascm/akaylee-fuzzer/pkg/strategies"
@@ -65,6 +66,45 @@ func RunFuzz(cmd *cobra.Command, args []string) error {
 
 	// Create fuzzer engine
 	engine := core.NewEngine()
+
+	// --- Expansion Integration ---
+	// Build expansion config from viper
+	expansionCfg := &expansion.ExpansionConfig{
+		Enabled:        viper.GetBool("expansion.enabled"),
+		Interval:       viper.GetString("expansion.interval"),
+		DatasetSources: viper.GetStringSlice("expansion.dataset_sources"),
+		DatasetFormats: viper.GetStringSlice("expansion.dataset_formats"),
+		APISources:     viper.GetStringSlice("expansion.api_sources"),
+		APIFormats:     viper.GetStringSlice("expansion.api_formats"),
+		APIMethods:     viper.GetStringSlice("expansion.api_methods"),
+		APIHeaders:     viper.GetStringSlice("expansion.api_headers"),
+		APIBodies:      viper.GetStringSlice("expansion.api_bodies"),
+		Timeout:        viper.GetString("expansion.timeout"),
+	}
+
+	expMgr, err := expansion.BuildManagerFromConfig(expansionCfg)
+	if err != nil {
+		return fmt.Errorf("failed to set up expansion manager: %w", err)
+	}
+	if expMgr != nil {
+		fmt.Println("[expansion] Seed corpus auto-expansion enabled!")
+		expMgr.RegisterCallback(func(seeds [][]byte) {
+			if len(seeds) > 0 {
+				fmt.Printf("[expansion] Injecting %d new seeds into corpus...\n", len(seeds))
+				for _, seed := range seeds {
+					tc := &core.TestCase{
+						ID:         "expansion-" + fmt.Sprintf("%x", seed[:8]),
+						Data:       seed,
+						Generation: 0,
+						CreatedAt:  time.Now(),
+						Priority:   80,
+					}
+					engine.AddTestCase(tc)
+				}
+			}
+		})
+		expMgr.Start()
+	}
 
 	// Set up components
 	if err := setupFuzzerComponents(engine, config); err != nil {

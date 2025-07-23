@@ -103,6 +103,18 @@ cases in target applications with exceptional efficiency.`,
 	// Add inference-specific flags
 	rootCmd.PersistentFlags().String("format", "auto", "Format for inference (json, binary, auto)")
 
+	// Add expansion (auto-expansion) flags
+	rootCmd.PersistentFlags().Bool("expansion-enabled", false, "Enable seed corpus auto-expansion from real-world data")
+	rootCmd.PersistentFlags().String("expansion-interval", "1h", "Interval for auto-expansion (e.g. 10m, 1h)")
+	rootCmd.PersistentFlags().StringSlice("expansion-dataset-sources", []string{}, "Dataset URLs or file paths for auto-expansion")
+	rootCmd.PersistentFlags().StringSlice("expansion-dataset-formats", []string{}, "Dataset formats (json, csv, txt, bin)")
+	rootCmd.PersistentFlags().StringSlice("expansion-api-sources", []string{}, "API endpoint URLs for auto-expansion")
+	rootCmd.PersistentFlags().StringSlice("expansion-api-formats", []string{}, "API formats (json, csv, txt)")
+	rootCmd.PersistentFlags().StringSlice("expansion-api-methods", []string{}, "API HTTP methods (GET, POST)")
+	rootCmd.PersistentFlags().StringSlice("expansion-api-headers", []string{}, "API headers (e.g. Authorization: Bearer ...)")
+	rootCmd.PersistentFlags().StringSlice("expansion-api-bodies", []string{}, "API POST bodies (optional)")
+	rootCmd.PersistentFlags().String("expansion-timeout", "10s", "Timeout for expansion requests")
+
 	// Bind flags to viper
 	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
 	viper.BindPFlag("json_logs", rootCmd.PersistentFlags().Lookup("json-logs"))
@@ -112,6 +124,16 @@ cases in target applications with exceptional efficiency.`,
 	viper.BindPFlag("log_max_size", rootCmd.PersistentFlags().Lookup("log-max-size"))
 	viper.BindPFlag("log_compress", rootCmd.PersistentFlags().Lookup("log-compress"))
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
+	viper.BindPFlag("expansion.enabled", rootCmd.PersistentFlags().Lookup("expansion-enabled"))
+	viper.BindPFlag("expansion.interval", rootCmd.PersistentFlags().Lookup("expansion-interval"))
+	viper.BindPFlag("expansion.dataset_sources", rootCmd.PersistentFlags().Lookup("expansion-dataset-sources"))
+	viper.BindPFlag("expansion.dataset_formats", rootCmd.PersistentFlags().Lookup("expansion-dataset-formats"))
+	viper.BindPFlag("expansion.api_sources", rootCmd.PersistentFlags().Lookup("expansion-api-sources"))
+	viper.BindPFlag("expansion.api_formats", rootCmd.PersistentFlags().Lookup("expansion-api-formats"))
+	viper.BindPFlag("expansion.api_methods", rootCmd.PersistentFlags().Lookup("expansion-api-methods"))
+	viper.BindPFlag("expansion.api_headers", rootCmd.PersistentFlags().Lookup("expansion-api-headers"))
+	viper.BindPFlag("expansion.api_bodies", rootCmd.PersistentFlags().Lookup("expansion-api-bodies"))
+	viper.BindPFlag("expansion.timeout", rootCmd.PersistentFlags().Lookup("expansion-timeout"))
 
 	// Add fuzz command
 	fuzzCmd := &cobra.Command{
