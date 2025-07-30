@@ -70,7 +70,7 @@ type ExploitabilityReport struct {
 	Metadata        map[string]interface{} // Additional data
 }
 
-// ProofOfConcept represents a generated proof of concept exploit
+// proof of concept or piece of crap you choose 
 type ProofOfConcept struct {
 	Code         string                 // Exploit code
 	Description  string                 // How to use
@@ -80,7 +80,6 @@ type ProofOfConcept struct {
 	Metadata     map[string]interface{} // Additional data
 }
 
-// ReproducibilityHarness provides comprehensive crash reproduction and analysis
 type ReproducibilityHarness struct {
 	config       *ReproducibilityConfig
 	triageEngine *CrashTriageEngine
@@ -89,7 +88,6 @@ type ReproducibilityHarness struct {
 	results      map[string]*ReproducibilityResult // Cache results by crash hash
 }
 
-// ReproducibilityConfig configures the reproducibility harness
 type ReproducibilityConfig struct {
 	MaxReproductionAttempts int           // Maximum attempts to reproduce crash
 	ReproductionTimeout     time.Duration // Timeout per reproduction attempt
@@ -101,7 +99,6 @@ type ReproducibilityConfig struct {
 	DetailedLogging         bool          // Enable detailed reproduction logging
 }
 
-// NewReproducibilityHarness creates a new reproducibility harness
 func NewReproducibilityHarness(config *ReproducibilityConfig) *ReproducibilityHarness {
 	if config == nil {
 		config = &ReproducibilityConfig{
@@ -110,7 +107,7 @@ func NewReproducibilityHarness(config *ReproducibilityConfig) *ReproducibilityHa
 			MinimalTestCaseSize:     1024,
 			EnableRootCauseAnalysis: true,
 			EnableExploitability:    true,
-			EnableProofOfConcept:    false, // Disabled by default for safety
+			EnableProofOfConcept:    false, // safety
 			OutputDirectory:         "./reproductions",
 			DetailedLogging:         true,
 		}
@@ -123,24 +120,20 @@ func NewReproducibilityHarness(config *ReproducibilityConfig) *ReproducibilityHa
 	}
 }
 
-// SetExecutor sets the executor for reproduction attempts
 func (h *ReproducibilityHarness) SetExecutor(executor interfaces.Executor) {
 	h.executor = executor
 }
 
-// SetLogger sets the logger for detailed reproduction logging
 func (h *ReproducibilityHarness) SetLogger(logger *logrus.Logger) {
 	h.logger = logger
 }
 
-// AnalyzeCrash performs comprehensive crash reproduction and analysis
 func (h *ReproducibilityHarness) AnalyzeCrash(
 	testCase *interfaces.TestCase,
 	originalResult *interfaces.ExecutionResult,
 ) (*ReproducibilityResult, error) {
 	startTime := time.Now()
 
-	// Create crash hash for caching
 	crashHash := h.calculateCrashHash(originalResult)
 	if cached, exists := h.results[crashHash]; exists {
 		return cached, nil
@@ -155,29 +148,24 @@ func (h *ReproducibilityHarness) AnalyzeCrash(
 		Metadata:             make(map[string]interface{}),
 	}
 
-	// Perform crash triage first
+
 	triage := h.triageEngine.TriageCrash(originalResult.CrashInfo, originalResult)
 	result.Metadata["triage"] = triage
 
-	// Attempt to reproduce the crash
 	h.attemptReproduction(testCase, originalResult, result)
 
-	// Generate minimal test case if reproducible
 	if result.Reproducible {
 		h.generateMinimalTestCase(testCase, originalResult, result)
 	}
 
-	// Perform root cause analysis if enabled
 	if h.config.EnableRootCauseAnalysis {
 		result.RootCauseAnalysis = h.analyzeRootCause(result, triage)
 	}
 
-	// Perform exploitability assessment if enabled
 	if h.config.EnableExploitability {
 		result.Exploitability = h.assessExploitability(result, triage)
 	}
 
-	// Generate proof of concept if enabled and appropriate
 	if h.config.EnableProofOfConcept && result.Exploitability != nil {
 		if result.Exploitability.Exploitability == ExploitabilityHigh ||
 			result.Exploitability.Exploitability == ExploitabilityConfirmed {
@@ -186,17 +174,12 @@ func (h *ReproducibilityHarness) AnalyzeCrash(
 	}
 
 	result.ReproductionTime = time.Since(startTime)
-
-	// Save detailed report
 	h.saveReproductionReport(result)
-
-	// Cache result
 	h.results[crashHash] = result
 
 	return result, nil
 }
 
-// attemptReproduction attempts to reproduce the crash multiple times
 func (h *ReproducibilityHarness) attemptReproduction(
 	testCase *interfaces.TestCase,
 	originalResult *interfaces.ExecutionResult,
@@ -210,7 +193,6 @@ func (h *ReproducibilityHarness) attemptReproduction(
 			h.logger.Infof("Reproduction attempt %d/%d", attempt, h.config.MaxReproductionAttempts)
 		}
 
-		// Execute the test case
 		reproductionResult, err := h.executor.Execute(testCase)
 		if err != nil {
 			if h.logger != nil {
@@ -218,8 +200,6 @@ func (h *ReproducibilityHarness) attemptReproduction(
 			}
 			continue
 		}
-
-		// Check if it reproduced the same crash
 		reproductionHash := h.calculateCrashHash(reproductionResult)
 		if reproductionHash == originalCrashHash {
 			successfulReproductions++
@@ -227,8 +207,6 @@ func (h *ReproducibilityHarness) attemptReproduction(
 				h.logger.Infof("Reproduction attempt %d successful", attempt)
 			}
 		}
-
-		// Collect stack trace if available
 		if reproductionResult.CrashInfo != nil && len(reproductionResult.CrashInfo.StackTrace) > 0 {
 			stackTrace := strings.Join(reproductionResult.CrashInfo.StackTrace, "\n")
 			if !h.containsStackTrace(result.StackTraces, stackTrace) {
@@ -238,18 +216,14 @@ func (h *ReproducibilityHarness) attemptReproduction(
 
 		result.ReproductionAttempts++
 	}
-
-	// Calculate reproduction rate
 	result.ReproductionRate = float64(successfulReproductions) / float64(h.config.MaxReproductionAttempts)
-	result.Reproducible = result.ReproductionRate > 0.5 // Consider reproducible if >50% success rate
+	result.Reproducible = result.ReproductionRate > 0.5 // reproducible if >50% success rate
 
 	if h.logger != nil {
 		h.logger.Infof("Crash reproduction: %d/%d successful (%.1f%%)",
 			successfulReproductions, h.config.MaxReproductionAttempts, result.ReproductionRate*100)
 	}
 }
-
-// generateMinimalTestCase creates the smallest test case that still reproduces the crash
 func (h *ReproducibilityHarness) generateMinimalTestCase(
 	testCase *interfaces.TestCase,
 	originalResult *interfaces.ExecutionResult,
@@ -258,18 +232,14 @@ func (h *ReproducibilityHarness) generateMinimalTestCase(
 	if h.logger != nil {
 		h.logger.Info("Generating minimal test case...")
 	}
-
-	// Use the crash minimizer to reduce the test case
 	minimized, err := h.triageEngine.MinimizeCrash(testCase, originalResult)
 	if err != nil {
 		if h.logger != nil {
 			h.logger.Warnf("Failed to minimize test case: %v", err)
 		}
-		result.MinimalTestCase = testCase // Use original if minimization fails
+		result.MinimalTestCase = testCase
 		return
 	}
-
-	// Verify the minimized test case still reproduces the crash
 	verificationResult, err := h.executor.Execute(minimized)
 	if err == nil && h.calculateCrashHash(verificationResult) == h.calculateCrashHash(originalResult) {
 		result.MinimalTestCase = minimized
@@ -278,14 +248,12 @@ func (h *ReproducibilityHarness) generateMinimalTestCase(
 				len(minimized.Data), len(testCase.Data))
 		}
 	} else {
-		result.MinimalTestCase = testCase // Use original if verification fails
+		result.MinimalTestCase = testCase 
 		if h.logger != nil {
 			h.logger.Warn("Minimized test case failed verification, using original")
 		}
 	}
 }
-
-// analyzeRootCause performs automated root cause analysis
 func (h *ReproducibilityHarness) analyzeRootCause(
 	result *ReproducibilityResult,
 	triage *TriageResult,
@@ -299,7 +267,6 @@ func (h *ReproducibilityHarness) analyzeRootCause(
 		Metadata:        make(map[string]interface{}),
 	}
 
-	// Analyze based on crash type
 	switch triage.CrashType {
 	case CrashTypeBufferOverflow:
 		analysis.PrimaryCause = "buffer overflow"
@@ -310,7 +277,7 @@ func (h *ReproducibilityHarness) analyzeRootCause(
 		analysis.CVSSScore = &CVSSScore{
 			BaseScore: 8.1,
 			Vector:    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-			Severity:  "HIGH",
+			Severity:  "HIGH", //バカの犬ねー
 		}
 
 	case CrashTypeUseAfterFree:
@@ -349,19 +316,14 @@ func (h *ReproducibilityHarness) analyzeRootCause(
 			Severity:  "MEDIUM",
 		}
 	}
-
-	// Analyze exploitability
 	if triage.Exploitability == ExploitabilityHigh || triage.Exploitability == ExploitabilityConfirmed {
 		analysis.SecondaryCauses = append(analysis.SecondaryCauses, "highly exploitable")
 		analysis.Confidence += 0.1
 	}
-
-	// Analyze based on stack traces
 	if len(result.StackTraces) > 0 {
 		analysis.Evidence = append(analysis.Evidence, fmt.Sprintf("Collected %d stack traces", len(result.StackTraces)))
 	}
 
-	// Cap confidence at 1.0
 	if analysis.Confidence > 1.0 {
 		analysis.Confidence = 1.0
 	}
@@ -369,7 +331,6 @@ func (h *ReproducibilityHarness) analyzeRootCause(
 	return analysis
 }
 
-// assessExploitability provides detailed exploitability assessment
 func (h *ReproducibilityHarness) assessExploitability(
 	result *ReproducibilityResult,
 	triage *TriageResult,
@@ -385,7 +346,6 @@ func (h *ReproducibilityHarness) assessExploitability(
 		Metadata:        make(map[string]interface{}),
 	}
 
-	// Refine assessment based on crash type and reproduction rate
 	switch triage.CrashType {
 	case CrashTypeBufferOverflow:
 		if result.ReproductionRate > 0.8 {
@@ -406,7 +366,6 @@ func (h *ReproducibilityHarness) assessExploitability(
 		report.Metadata["null_pointer_type"] = "dereference"
 	}
 
-	// Adjust based on reproduction rate
 	if result.ReproductionRate < 0.5 {
 		report.Complexity = "high"
 		report.Confidence *= 0.8
@@ -414,8 +373,6 @@ func (h *ReproducibilityHarness) assessExploitability(
 
 	return report
 }
-
-// generateProofOfConcept creates a proof of concept exploit
 func (h *ReproducibilityHarness) generateProofOfConcept(
 	result *ReproducibilityResult,
 ) *ProofOfConcept {
@@ -428,7 +385,7 @@ func (h *ReproducibilityHarness) generateProofOfConcept(
 		Metadata:     make(map[string]interface{}),
 	}
 
-	// Generate basic PoC code based on crash type
+	// Generate PoC
 	if result.RootCauseAnalysis != nil {
 		switch result.RootCauseAnalysis.PrimaryCause {
 		case "buffer overflow":
@@ -438,13 +395,8 @@ func (h *ReproducibilityHarness) generateProofOfConcept(
 int main() {
     char buffer[64];
     char exploit[128];
-    
-    // Create exploit payload
     memset(exploit, 'A', sizeof(exploit));
-    
-    // Trigger buffer overflow
     strcpy(buffer, exploit);
-    
     return 0;
 }`
 			poc.Description = "Buffer overflow proof of concept - demonstrates memory corruption"
@@ -463,37 +415,30 @@ int main() {
 			poc.Description = "Null pointer dereference proof of concept"
 
 		default:
-			poc.Code += `// Generic proof of concept
+			poc.Code += `// poc
 // Use the minimal test case data to reproduce the crash
 // Target: [TARGET_BINARY]
 // Input: [MINIMAL_TEST_CASE_DATA]`
-			poc.Description = "Generic proof of concept using minimal test case"
+			poc.Description = "poc use test case"
 		}
 	}
 
 	return poc
 }
-
-// saveReproductionReport saves a detailed reproduction report
 func (h *ReproducibilityHarness) saveReproductionReport(result *ReproducibilityResult) {
 	if h.config.OutputDirectory == "" {
 		return
 	}
-
-	// Create output directory
 	if err := os.MkdirAll(h.config.OutputDirectory, 0755); err != nil {
 		if h.logger != nil {
 			h.logger.Errorf("Failed to create output directory: %v", err)
 		}
 		return
 	}
-
-	// Create report filename
 	timestamp := time.Now().Format("20060102_150405")
 	filename := fmt.Sprintf("reproduction_%s_%s.json", timestamp, result.CrashInfo.Hash)
 	filepath := filepath.Join(h.config.OutputDirectory, filename)
-
-	// Marshal report to JSON
+// 超ムカつくね〜 😡 
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		if h.logger != nil {
@@ -501,8 +446,6 @@ func (h *ReproducibilityHarness) saveReproductionReport(result *ReproducibilityR
 		}
 		return
 	}
-
-	// Write report
 	if err := os.WriteFile(filepath, data, 0644); err != nil {
 		if h.logger != nil {
 			h.logger.Errorf("Failed to write reproduction report: %v", err)
@@ -515,7 +458,6 @@ func (h *ReproducibilityHarness) saveReproductionReport(result *ReproducibilityR
 	}
 }
 
-// calculateCrashHash creates a hash for crash deduplication
 func (h *ReproducibilityHarness) calculateCrashHash(result *interfaces.ExecutionResult) string {
 	hash := sha256.New()
 	hash.Write([]byte(fmt.Sprintf("%d", result.Signal)))
@@ -524,8 +466,6 @@ func (h *ReproducibilityHarness) calculateCrashHash(result *interfaces.Execution
 	hash.Write(result.Error)
 	return hex.EncodeToString(hash.Sum(nil))[:16]
 }
-
-// containsStackTrace checks if a stack trace is already in the collection
 func (h *ReproducibilityHarness) containsStackTrace(traces []string, newTrace string) bool {
 	for _, trace := range traces {
 		if trace == newTrace {
@@ -534,8 +474,6 @@ func (h *ReproducibilityHarness) containsStackTrace(traces []string, newTrace st
 	}
 	return false
 }
-
-// GetReproductionStats returns statistics about reproduction attempts
 func (h *ReproducibilityHarness) GetReproductionStats() map[string]interface{} {
 	totalCrashes := len(h.results)
 	reproducibleCrashes := 0
