@@ -1,26 +1,25 @@
-# Akaylee Fuzzer 🚀
-
+# Akaylee Fuzzer 
 
 ## Overview
 
-Akaylee Fuzzer is a sophisticated, enterprise-grade fuzzing engine that combines multiple advanced fuzzing strategies with intelligent execution management. Built with performance and scalability in mind, it's designed to discover vulnerabilities and edge cases in target applications with exceptional efficiency.
+Akaylee Fuzzer is a fuzzing engine that combines multiple advanced fuzzing strategies with intelligent execution management. Built with performance and scalability in mind, it's designed to discover vulnerabilities and edge cases in target applications with exceptional efficiency.
 
 ## Features
 
-### 🎯 Core Capabilities
+###  Core Capabilities
 - **Multi-Strategy Fuzzing**: Combines mutation-based, generation-based, and coverage-guided fuzzing
 - **Intelligent Execution Engine**: Advanced process management with crash detection and recovery
 - **Real-time Analysis**: Live coverage tracking and performance metrics
 - **Corpus Management**: Smart seed corpus evolution and optimization
 - **Parallel Execution**: Multi-threaded fuzzing with configurable worker pools
 
-### ⚡ Performance Features
+###  Performance Features
 - **Zero-Copy Mutations**: Minimizes memory allocations for maximum throughput
 - **Efficient Coverage Tracking**: Bitmap-based coverage with minimal overhead
 - **Smart Scheduling**: Prioritizes promising test cases based on coverage and crash potential
 - **Memory Management**: Optimized memory usage with garbage collection tuning
 
-### 🔧 Advanced Capabilities
+###  Advanced Capabilities
 - **Custom Mutators**: Extensible mutation strategies for domain-specific fuzzing
 - **Crash Analysis**: Automated crash triaging and deduplication
 - **Reproduction**: Deterministic crash reproduction for debugging
