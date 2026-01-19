@@ -1,125 +1,285 @@
-# Akaylee Fuzzer 
+# Akaylee
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
+  <img src="https://img.shields.io/badge/Security-Fuzzer-DC143C?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/chromedp-333?style=flat-square" />
+  <img src="https://img.shields.io/badge/Cobra-888?style=flat-square" />
+  <img src="https://img.shields.io/badge/ADB-3DDC84?style=flat-square&logo=android&logoColor=white" />
+  <img src="https://img.shields.io/badge/logrus-333?style=flat-square" />
+</p>
+
+A modular security fuzzing engine written in Go, designed for comprehensive vulnerability discovery across binaries, HTTP APIs, web applications, and Android mobile apps.
 
 ## Overview
 
-Akaylee Fuzzer is a fuzzing engine that combines multiple advanced fuzzing strategies with intelligent execution management. Built with performance and scalability in mind, it's designed to discover vulnerabilities and edge cases in target applications with exceptional efficiency.
+Akaylee is a multi-target security fuzzer that combines coverage-guided fuzzing with intelligent mutation strategies. Unlike traditional fuzzers that focus on a single target type, Akaylee provides unified fuzzing capabilities for:
 
-## Features
-
-###  Core Capabilities
-- **Multi-Strategy Fuzzing**: Combines mutation-based, generation-based, and coverage-guided fuzzing
-- **Intelligent Execution Engine**: Advanced process management with crash detection and recovery
-- **Real-time Analysis**: Live coverage tracking and performance metrics
-- **Corpus Management**: Smart seed corpus evolution and optimization
-- **Parallel Execution**: Multi-threaded fuzzing with configurable worker pools
-
-###  Performance Features
-- **Zero-Copy Mutations**: Minimizes memory allocations for maximum throughput
-- **Efficient Coverage Tracking**: Bitmap-based coverage with minimal overhead
-- **Smart Scheduling**: Prioritizes promising test cases based on coverage and crash potential
-- **Memory Management**: Optimized memory usage with garbage collection tuning
-
-###  Advanced Capabilities
-- **Custom Mutators**: Extensible mutation strategies for domain-specific fuzzing
-- **Crash Analysis**: Automated crash triaging and deduplication
-- **Reproduction**: Deterministic crash reproduction for debugging
-- **Reporting**: Comprehensive reports with vulnerability classification
+- **Binary targets** — Traditional executable fuzzing with crash detection
+- **HTTP/REST APIs** — Endpoint fuzzing with injection payload generation
+- **Web applications** — Headless browser automation via chromedp
+- **Android apps** — Mobile fuzzing via ADB with intent/event injection
 
 ## Architecture
 
 ```
-Akaylee Fuzzer/
-├── cmd/fuzzer/          # Main application entry point
-├── pkg/
-│   ├── core/           # Core fuzzing engine and types
-│   ├── strategies/     # Fuzzing strategies and mutators
-│   ├── execution/      # Process execution and management
-│   ├── analysis/       # Coverage analysis and crash detection
-│   └── utils/          # Utility functions and helpers
-├── internal/
-│   ├── config/         # Configuration management
-│   └── logging/        # Structured logging
-├── Docs/              # Project documentation
-├── Tests/             # Test suites
-└── notebook/          # Jupyter notebooks for analysis
+┌─────────────────────────────────────────────────────────────────┐
+│                         Akaylee Engine                          │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │  Corpus  │  │  Queue   │  │ Scheduler│  │     Workers      │ │
+│  │ Manager  │─▶│ Priority │─▶│  (Smart) │─▶│ (Parallel Pool)  │ │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘ │
+├─────────────────────────────────────────────────────────────────┤
+│                         Mutators                                │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────┐  │
+│  │  Bit-Flip  │ │  Grammar   │ │    API     │ │ State-Aware  │  │
+│  │  Mutator   │ │  Mutator   │ │  Mutator   │ │   Mutator    │  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                         Executors                               │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────┐  │
+│  │   Binary   │ │    API     │ │    Web     │ │   Mobile     │  │
+│  │  Executor  │ │  Executor  │ │ (chromedp) │ │    (ADB)     │  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                       Analysis & Reporting                      │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────┐  │
+│  │  Coverage  │ │   Crash    │ │   State    │ │   Reports    │  │
+│  │  Tracking  │ │  Analysis  │ │  Manager   │ │  (HTML/JSON) │  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+## Features
 
-### Prerequisites
-- Go 1.21 or later
-- Linux/macOS (Windows support coming soon)
+### Mutation Strategies
 
-### Installation
+| Strategy | Description |
+|----------|-------------|
+| **Bit-Flip** | Random bit-level mutations for binary fuzzing |
+| **Grammar-Aware** | Structure-preserving mutations using formal grammars |
+| **API Mutator** | Injection payloads for SQL, XSS, command injection, path traversal |
+| **State-Aware** | Respects application state for stateful target fuzzing |
+| **Composite** | Combines multiple strategies with configurable weights |
+
+### Security Payload Generation
+
+The API mutator includes curated payloads for:
+
+- **SQL Injection** — Union-based, error-based, blind injection variants
+- **Cross-Site Scripting (XSS)** — Script injection, event handlers, polyglots
+- **Command Injection** — Shell metacharacters, command chaining
+- **Path Traversal** — Directory escape sequences, null byte injection
+- **Authentication Bypass** — Header manipulation, JWT tampering
+- **NoSQL Injection** — MongoDB/CouchDB specific payloads
+- **Rate Limit Bypass** — Header spoofing techniques
+
+### Web Fuzzing (chromedp)
+
+Headless Chrome automation with:
+
+- Cookie and header manipulation
+- Form filling and submission
+- JavaScript execution in page context
+- Console log and network event collection
+- Screenshot capture for crash reproduction
+- DOM inspection and mutation
+
+### Mobile Fuzzing (ADB)
+
+Android device/emulator automation with:
+
+- App install, launch, and lifecycle management
+- Intent injection with action/data/extras
+- UI event injection (tap, input, swipe)
+- Logcat collection for crash detection
+- Screenshot capture for reproduction
+- Device info and property retrieval
+
+### State Management
+
+For stateful targets (databases, APIs, sessions):
+
+- State capture and snapshot creation
+- State restoration for reproducible testing
+- Transition graph exploration
+- State validation and recovery
+
+## Installation
+
 ```bash
-git clone https://github.com/kleascm/akaylee-fuzzer.git
-cd akaylee-fuzzer
+git clone https://github.com/KleaSCM/Akaylee.git
+cd Akaylee
 go mod download
-go build -o akaylee-fuzzer ./cmd/fuzzer
+go build -o akaylee ./Akaylee.go
 ```
 
-### Basic Usage
-```bash
-# Fuzz a target binary
-./akaylee-fuzzer fuzz --target ./my-app --corpus ./seeds
+### Dependencies
 
-# Fuzz with custom configuration
-./akaylee-fuzzer fuzz \
-  --target ./my-app \
+- **Go 1.21+**
+- **chromedp** — For web application fuzzing
+- **ADB** — For Android mobile fuzzing (optional)
+
+## Usage
+
+### Binary Fuzzing
+
+```bash
+./akaylee fuzz \
+  --target ./vulnerable-binary \
   --corpus ./seeds \
   --workers 8 \
-  --timeout 30s \
-  --max-crashes 100
+  --timeout 30s
+```
+
+### API Fuzzing
+
+```bash
+./akaylee fuzz \
+  --mode api \
+  --target http://localhost:8080/api \
+  --endpoints ./openapi.json \
+  --mutations sql,xss,auth-bypass
+```
+
+### Web Application Fuzzing
+
+```bash
+./akaylee fuzz \
+  --mode web \
+  --target http://localhost:3000 \
+  --headless \
+  --screenshot-on-crash
+```
+
+### Android Fuzzing
+
+```bash
+./akaylee fuzz \
+  --mode mobile \
+  --device emulator-5554 \
+  --app ./target.apk \
+  --intents ./intent-seeds.json
+```
+
+## Project Structure
+
+```
+Akaylee/
+├── Akaylee.go              # Main entry point
+├── cmd/                    # CLI commands (Cobra)
+├── pkg/
+│   ├── core/              # Engine, corpus, queue, workers
+│   ├── strategies/        # Mutation strategies
+│   │   ├── mutators.go        # Bit-flip, byte substitution
+│   │   ├── api_mutator.go     # Injection payloads
+│   │   ├── grammar_mutator.go # Grammar-based generation
+│   │   └── state_aware_mutator.go
+│   ├── execution/         # Target execution
+│   │   ├── executor.go        # Binary execution
+│   │   ├── api_executor.go    # HTTP API execution
+│   │   ├── state_manager.go   # State capture/restore
+│   │   └── state_validators.go
+│   ├── web/               # Web fuzzing
+│   │   ├── chromedp_controller.go
+│   │   ├── fuzzer.go
+│   │   └── analyzer.go
+│   ├── mobile/            # Android fuzzing
+│   │   ├── adb_controller.go
+│   │   ├── app_analyzer.go
+│   │   ├── fuzzer.go
+│   │   └── intent_mutator.go
+│   ├── analysis/          # Coverage and crash analysis
+│   ├── coverage/          # Bitmap coverage tracking
+│   ├── inference/         # Input format inference
+│   ├── monitoring/        # Real-time statistics
+│   └── reporting/         # HTML/JSON reports
+└── Docs/                  # Documentation
 ```
 
 ## Configuration
 
-Akaylee Fuzzer supports extensive configuration through command-line flags, environment variables, and configuration files.
+Configuration via YAML file or command-line flags:
 
-### Key Configuration Options
-- `--workers`: Number of parallel fuzzing workers
-- `--timeout`: Maximum execution time per test case
-- `--max-crashes`: Maximum number of crashes to collect
-- `--corpus-dir`: Directory containing seed corpus
-- `--output-dir`: Directory for fuzzer output and artifacts
+```yaml
+target:
+  path: ./target-binary
+  mode: binary  # binary, api, web, mobile
 
-## Fuzzing Strategies
+corpus:
+  input_dir: ./seeds
+  output_dir: ./corpus
 
-### 1. Mutation-Based Fuzzing
-- **Bit Flipping**: Random bit-level mutations
-- **Byte Substitution**: Intelligent byte replacement
-- **Structure-Aware**: Maintains data structure integrity
+execution:
+  workers: 8
+  timeout: 30s
+  max_crashes: 100
 
-### 2. Generation-Based Fuzzing
-- **Grammar-Based**: Uses formal grammars for structured input
-- **Template-Based**: Generates inputs from predefined templates
-- **Constraint-Based**: Satisfies input constraints and invariants
+mutations:
+  strategies:
+    - bit-flip
+    - grammar
+  rate: 0.1
 
-### 3. Coverage-Guided Fuzzing
-- **Edge Coverage**: Tracks basic block transitions
-- **Path Coverage**: Monitors execution paths
-- **Function Coverage**: Tracks function entry/exit points
+coverage:
+  enabled: true
+  bitmap_size: 65536
 
-## Performance Tuning
+reporting:
+  format: html
+  output: ./reports
+```
 
-### Memory Optimization
-- Configure worker pool size based on available RAM
-- Use appropriate timeout values to prevent memory leaks
-- Enable garbage collection tuning for long-running sessions
+## Performance
 
-### CPU Optimization
-- Match worker count to available CPU cores
-- Use efficient coverage tracking algorithms
-- Optimize mutation strategies for target characteristics
+- **Zero-copy mutations** — Minimizes allocations for high throughput
+- **Bitmap coverage** — Efficient edge tracking with minimal overhead
+- **Priority queue** — Favors high-coverage inputs
+- **Parallel workers** — Scales with available CPU cores
 
-## Contributing
+## Documentation
 
-We welcome contributions! Please see our contributing guidelines in the `Docs/` directory.
+Detailed documentation is available in the [`Docs/`](./Docs) directory:
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](./Docs/ARCHITECTURE.md) | System architecture, component design, and extensibility points |
+| [LOGGING.md](./Docs/LOGGING.md) | Structured logging configuration and output formats |
+| [METRICS.md](./Docs/METRICS.md) | Performance metrics and monitoring |
+
+## Demo
+
+Example targets and usage demos are available in the [`demo/`](./demo) directory:
+
+- **grammar_demo.go** — Grammar-based fuzzing demonstration
+- **target.go** — Example vulnerable target for testing
+- **CORPUS.md** — Corpus management documentation
+
+## Testing
+
+Run the test suite:
+
+```bash
+go test ./Tests/...
+```
+
+Test coverage includes:
+
+- Crash triage and deduplication
+- Grammar inference and mutation
+- Logging and metrics collection
+- Mutator correctness and performance
+- Monitoring and statistics
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License — see LICENSE file for details.
 
-## Support
+## Contact
 
-For support and questions, please open an issue on GitHub or contact KleaSCM@gmail.com. 
+For questions and support: <KleaSCM@gmail.com>
